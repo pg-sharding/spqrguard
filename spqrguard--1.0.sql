@@ -17,7 +17,7 @@ CREATE TABLE spqr_metadata.spqr_local_key_ranges (
 );
 
 
-CREATE OR REPLACE FUNCTION spqr_metadata.split_metadata_key_range(
+CREATE OR REPLACE FUNCTION spqr_metadata.split_metadata_key_range (
     v_key_range_id TEXT,
     v_outer_key_range_id TEXT,
     v_split_bound BIGINT
