@@ -60,7 +60,7 @@ static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid re
     ScanKeyInit(&skey[0], Anum_spqr_distributed_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
                 ObjectIdGetDatum(relid));
 
-    scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 2, skey);
+    scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 1, skey);
     
     tuple = systable_getnext(scan);
 
