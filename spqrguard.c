@@ -31,7 +31,7 @@ static ExecutorRun_hook_type prev_ExecutorRun_hook = NULL;
 
 
 typedef struct spqrguard_distributedRelations {
-    List *relids;
+    Oid spqr_metadata_reloid;
 } spqrguard_distributedRelations; 
 
 
@@ -42,7 +42,37 @@ spqrguard_ExecutorRun(QueryDesc *queryDesc,
 
 static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid relid) {
     /* NOOP for now */
-    return true;
+    Relation spqrrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    bool    res;
+    ScanKeyData skey[1];
+
+    res = false;
+
+    /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
+    /**/
+    
+    spqrrel = table_open(ctx->spqr_metadata_reloid, AccessShareLock);
+
+#define Anum_spqr_distributed_relations_reloid 0
+
+    ScanKeyInit(&skey[0], Anum_spqr_distributed_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
+                ObjectIdGetDatum(relid));
+
+    scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 2, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+        res = true;
+    }
+
+    table_close(spqrrel, AccessShareLock);
+    systable_endscan(scan);
+
+    return res;
 }
 
 /*
@@ -82,7 +112,6 @@ const char * spqrguard_dr_schema = "spqr_metadata";
 
 
 static Oid SPQRGResolveMetadataSchemaOid() {
-    Snapshot snap;
     Relation nsprel;
     SysScanDesc scan;
     HeapTuple tuple;
@@ -93,15 +122,14 @@ static Oid SPQRGResolveMetadataSchemaOid() {
     MetadataSchemaOid = InvalidOid;
 
     /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
-    snap = RegisterSnapshot(GetTransactionSnapshot());
     /**/
     
     nsprel = table_open(NamespaceRelationId, RowExclusiveLock);
 
-    ScanKeyInit(&skey[0], Anum_pg_class_relname, BTEqualStrategyNumber, F_NAMEEQ,
+    ScanKeyInit(&skey[0], Anum_pg_namespace_nspname, BTEqualStrategyNumber, F_NAMEEQ,
                 CStringGetDatum(spqrguard_dr_schema));
 
-    scan = systable_beginscan(nsprel, ClassNameNspIndexId, true, snap, 2, skey);
+    scan = systable_beginscan(nsprel, NamespaceNameIndexId, true, NULL, 1, skey);
     
     tuple = systable_getnext(scan);
 
@@ -113,13 +141,11 @@ static Oid SPQRGResolveMetadataSchemaOid() {
 
     table_close(nsprel, RowExclusiveLock);
     systable_endscan(scan);
-    UnregisterSnapshot(snap);
 
     return MetadataSchemaOid;
 }
 
 static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
-    Snapshot snap;
     Relation classrel;
     SysScanDesc scan;
     HeapTuple tuple;
@@ -131,7 +157,6 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
     
     /* SELECT FROM pg_catalog.pg_class WHERE relname = 'spqr_distributed_relations '
     * and relnamespace = $oid; */
-    snap = RegisterSnapshot(GetTransactionSnapshot());
     /**/
     
     classrel = table_open(RelationRelationId, RowExclusiveLock);
@@ -142,7 +167,7 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
     ScanKeyInit(&skey[1], Anum_pg_class_relnamespace, BTEqualStrategyNumber,
                 F_OIDEQ, ObjectIdGetDatum(MetadataSchemaOid));
 
-    scan = systable_beginscan(classrel, ClassNameNspIndexId, true, snap, 2, skey);
+    scan = systable_beginscan(classrel, ClassNameNspIndexId, true, NULL, 2, skey);
     
     tuple = systable_getnext(scan);
 
@@ -154,24 +179,23 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
 
     table_close(classrel, RowExclusiveLock);
     systable_endscan(scan);
-    UnregisterSnapshot(snap);
 
     return DistrRelOid;
 }
 
 
 static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
-    /* NOOP for now */
+    if (ctx->spqr_metadata_reloid == InvalidOid) {
+        ctx->spqr_metadata_reloid = SPQRGResolveDistrRelOid(SPQRGResolveMetadataSchemaOid());
+    }
 }
+
+static spqrguard_distributedRelations cxt;
 
 void
 spqrguard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, uint64 count, bool execute_once)
 {
-
-    spqrguard_distributedRelations cxt;
-    cxt.relids = NULL;
-
     populate_spqrguard(&cxt);
 
     spqrguard_planstate_walker(queryDesc->planstate, &cxt);

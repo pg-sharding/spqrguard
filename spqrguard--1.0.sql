@@ -4,11 +4,11 @@
 CREATE SCHEMA spqr_metadata;
 
 CREATE TABLE spqr_metadata.spqr_distributed_relations (
-    reloid OID REFERENCES pg_class(oid)
+    reloid OID PRIMARY KEY REFERENCES pg_class(oid)
 );
 
 CREATE TABLE spqr_metadata.spqr_reference_relations (
-    reloid OID REFERENCES pg_class(oid)
+    reloid OID PRIMARY KEY REFERENCES pg_class(oid)
 );
 
 CREATE FUNCTION
