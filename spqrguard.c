@@ -55,7 +55,7 @@ static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid re
     
     spqrrel = table_open(ctx->spqr_metadata_reloid, AccessShareLock);
 
-#define Anum_spqr_distributed_relations_reloid 0
+#define Anum_spqr_distributed_relations_reloid 1
 
     ScanKeyInit(&skey[0], Anum_spqr_distributed_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
                 ObjectIdGetDatum(relid));
