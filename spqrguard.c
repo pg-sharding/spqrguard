@@ -39,6 +39,12 @@ void
 spqrguard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, uint64 count, bool execute_once);
 
+
+static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid relid) {
+    /* NOOP for now */
+    return true;
+}
+
 /*
 
 typedef bool (*planstate_tree_walker_callback) (struct PlanState *planstate,
@@ -81,7 +87,7 @@ static Oid SPQRGResolveMetadataSchemaOid() {
     SysScanDesc scan;
     HeapTuple tuple;
     Oid MetadataSchemaOid;
-
+    ScanKeyData skey[1];
     Form_pg_namespace nsp_type;
 
     MetadataSchemaOid = InvalidOid;
@@ -89,7 +95,6 @@ static Oid SPQRGResolveMetadataSchemaOid() {
     /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
     snap = RegisterSnapshot(GetTransactionSnapshot());
     /**/
-    ScanKeyData skey[1];
     
     nsprel = table_open(NamespaceRelationId, RowExclusiveLock);
 
@@ -119,7 +124,7 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
     SysScanDesc scan;
     HeapTuple tuple;
     Oid DistrRelOid;
-
+    ScanKeyData skey[2];
     Form_pg_class class_type;
 
     DistrRelOid = InvalidOid;
@@ -128,7 +133,6 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
     * and relnamespace = $oid; */
     snap = RegisterSnapshot(GetTransactionSnapshot());
     /**/
-    ScanKeyData skey[2];
     
     classrel = table_open(RelationRelationId, RowExclusiveLock);
 
@@ -156,8 +160,8 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
 }
 
 
-static populate_spqrguard(spqrguard_distributedRelations *ctx) {
-
+static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
+    /* NOOP for now */
 }
 
 void

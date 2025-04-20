@@ -7,6 +7,43 @@ CREATE TABLE spqr_metadata.spqr_distributed_relations (
     reloid OID REFERENCES pg_class(oid)
 );
 
+CREATE TABLE spqr_metadata.spqr_reference_relations (
+    reloid OID REFERENCES pg_class(oid)
+);
+
+CREATE FUNCTION
+spqr_metadata.mark_distributed_relation (reloid OID) 
+RETURNS VOID AS
+$$
+INSERT INTO spqr_metadata.spqr_distributed_relations VALUES (reloid);
+$$
+LANGUAGE SQL;
+
+CREATE FUNCTION
+spqr_metadata.mark_distributed_relation (relname TEXT) 
+RETURNS VOID AS
+$$
+SELECT spqr_metadata.mark_distributed_relation((relname)::regclass::oid);
+$$
+LANGUAGE SQL;
+
+
+CREATE FUNCTION
+spqr_metadata.mark_reference_relation (reloid OID) 
+RETURNS VOID AS
+$$
+INSERT INTO spqr_metadata.spqr_reference_relations VALUES (reloid);
+$$
+LANGUAGE SQL;
+
+CREATE FUNCTION
+spqr_metadata.mark_reference_relation (relname TEXT) 
+RETURNS VOID AS
+$$
+SELECT spqr_metadata.mark_reference_relation((relname)::regclass::oid);
+$$
+LANGUAGE SQL;
+
 -- n_lower_bound is next (neighbor) lower bound
 
 CREATE TABLE spqr_metadata.spqr_local_key_ranges (
