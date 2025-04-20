@@ -47,9 +47,9 @@ LANGUAGE SQL;
 -- n_lower_bound is next (neighbor) lower bound
 
 CREATE TABLE spqr_metadata.spqr_local_key_ranges (
-    spqr_distribution TEXT,
-    key_range_id TEXT PRIMARY KEY,
-    lower_bound BIGINT,
+    spqr_distribution TEXT NOT NULL,
+    key_range_id TEXT PRIMARY KEY NOT NULL,
+    lower_bound BIGINT NOT NULL,
     n_lower_bound BIGINT 
 );
 
