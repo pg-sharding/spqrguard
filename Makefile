@@ -10,7 +10,7 @@ DATA =  spqrguard--1.0.sql
 
 PGFILEDESC = "spqrguard - module for asserting SPQR data integrity"
 
-REGRESS = check
+REGRESS = simple
 
 TAP_TESTS = 1
 
