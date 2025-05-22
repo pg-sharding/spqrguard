@@ -3,8 +3,8 @@
 
 CREATE SCHEMA spqr_metadata;
 
-CREATE TABLE spqr_metadata.spqr_global_settins (
-    name INTEGER,
+CREATE TABLE spqr_metadata.spqr_global_settings (
+    name INTEGER UNIQUE,
     value TEXT
 );
 

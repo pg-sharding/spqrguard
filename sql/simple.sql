@@ -13,7 +13,7 @@ INSERT INTO not_spqr_t VALUES (1);
 INSERT INTO spqr_d_t VALUES (1);
 INSERT INTO spqr_ref_t VALUES (1);
 
-INSERT INTO spqr_metadata.spqr_global_settins VALUES (42, 'true');
+INSERT INTO spqr_metadata.spqr_global_settings VALUES (42, 'truee');
 
 INSERT INTO not_spqr_t VALUES (1);
 INSERT INTO spqr_d_t VALUES (1);

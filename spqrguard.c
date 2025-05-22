@@ -287,6 +287,8 @@ static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
         }
     }
 
+    ExecDropSingleTupleTableSlot(slot);
+
     table_endscan(desc);
     table_close(setrel, AccessShareLock);
 
@@ -296,13 +298,22 @@ static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
 static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
     if (ctx->spqr_d_metadata_reloid == InvalidOid)
     {
-        Oid spqrguard_dr_schema = SPQRGResolveMetadataSchemaOid();
-        ctx->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema);
-        ctx->spqr_ref_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema);
-        ctx->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema);
+        Oid spqrguard_dr_schema_oid = SPQRGResolveMetadataSchemaOid();
+        if (spqrguard_dr_schema_oid == InvalidOid) {
+            /* extension not created yet, but hook is already in-place. */
+        } else {
+            ctx->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
+            ctx->spqr_ref_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
+            ctx->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema_oid);
+        }
     }
 
-    prevent_distributed_table_modify = ResolveGlobalBoolSetting(ctx->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
+    if (ctx->spqr_global_settings_reloid == InvalidOid) {
+        prevent_distributed_table_modify = false;
+    } else {
+        prevent_distributed_table_modify = 
+            ResolveGlobalBoolSetting(ctx->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
+    }
 }
 
 static spqrguard_distributedRelations cxt;
