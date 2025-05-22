@@ -21,6 +21,7 @@ INSERT INTO spqr_ref_t VALUES (1);
 SET spqrguard.prevent_distributed_table_modify TO true;
 INSERT INTO not_spqr_t VALUES (1);
 INSERT INTO spqr_d_t VALUES (1);
+ERROR:  unable to modify distributed relation within read-only transaction
 INSERT INTO spqr_ref_t VALUES (1);
 DROP TABLE not_spqr_t, spqr_d_t, spqr_ref_t;
 DROP EXTENSION spqrguard;
