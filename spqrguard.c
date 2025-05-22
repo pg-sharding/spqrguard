@@ -19,6 +19,7 @@
 
 #include "access/table.h"
 #include "access/tableam.h"
+#include "access/genam.h"
 
 #include "utils/guc.h"
 
