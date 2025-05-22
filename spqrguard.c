@@ -287,7 +287,7 @@ static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
         }
     }
 
-    systable_endscan(desc);
+    table_endscan(desc);
     table_close(setrel, AccessShareLock);
 
     return val;
