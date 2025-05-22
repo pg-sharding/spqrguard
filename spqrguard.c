@@ -1,6 +1,8 @@
 
 #include "postgres.h"
 
+#include "c.h"
+
 #include "optimizer/planner.h"
 #include "nodes/nodeFuncs.h"
 #include "optimizer/planner.h"
@@ -21,6 +23,11 @@
 #include "access/tableam.h"
 #include "access/genam.h"
 
+#include "access/genam.h"
+
+#include "fmgr.h"
+
+#include "utils/builtins.h"
 #include "utils/guc.h"
 
 PG_MODULE_MAGIC;
@@ -32,7 +39,12 @@ static ExecutorRun_hook_type prev_ExecutorRun_hook = NULL;
 
 
 typedef struct spqrguard_distributedRelations {
-    Oid spqr_metadata_reloid;
+    Oid spqr_d_metadata_reloid;
+    Oid spqr_ref_metadata_reloid;
+
+    Oid spqr_global_settings_reloid;
+
+    bool prevent_distributed_table_modify;
 } spqrguard_distributedRelations; 
 
 
@@ -54,7 +66,7 @@ static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid re
     /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
     /**/
     
-    spqrrel = table_open(ctx->spqr_metadata_reloid, AccessShareLock);
+    spqrrel = table_open(ctx->spqr_d_metadata_reloid, AccessShareLock);
 
 #define Anum_spqr_distributed_relations_reloid 1
 
@@ -108,6 +120,7 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
 
 const char * spqrguard_dr_relname = "spqr_distributed_relations";
 const char * spqrguard_dr_schema = "spqr_metadata";
+const char * spqrguard_global_settings = "spqr_global_settings";
 
 /* It would be more handy to have FIXED-oid relations... */
 
@@ -184,11 +197,112 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
     return DistrRelOid;
 }
 
+static Oid SPQRGResolveGlobalSettingsOid(Oid MetadataSchemaOid) {
+    Relation classrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    Oid SetRelOid;
+    ScanKeyData skey[2];
+    Form_pg_class class_type;
+
+    SetRelOid = InvalidOid;
+    
+    /* SELECT FROM pg_catalog.pg_class WHERE relname = 'spqr_distributed_relations '
+    * and relnamespace = $oid; */
+    /**/
+    
+    classrel = table_open(RelationRelationId, RowExclusiveLock);
+
+    ScanKeyInit(&skey[0], Anum_pg_class_relname, BTEqualStrategyNumber, F_NAMEEQ,
+                CStringGetDatum(spqrguard_global_settings));
+
+    ScanKeyInit(&skey[1], Anum_pg_class_relnamespace, BTEqualStrategyNumber,
+                F_OIDEQ, ObjectIdGetDatum(MetadataSchemaOid));
+
+    scan = systable_beginscan(classrel, ClassNameNspIndexId, true, NULL, 2, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+	    class_type = (Form_pg_class) GETSTRUCT(tuple);
+        SetRelOid = class_type->oid;
+    }
+
+    table_close(classrel, RowExclusiveLock);
+    systable_endscan(scan);
+
+    return SetRelOid;
+}
+
+typedef struct Form_DataGlobalSettings {
+    int32_t name;
+
+    text value;
+} Form_DataGlobalSettings;
+
+typedef Form_DataGlobalSettings *Form_GlobalSettings;
+
+#define Anum_spqr_global_settings_name 1
+#define Anum_spqr_global_settings_value 2
+
+#define PREVENT_DISTRIBUTED_TABLE_MODIFY 42
+
+static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
+    Relation setrel;
+#define ResolveGlobalBoolSetCols 1
+    ScanKeyData skey[ResolveGlobalBoolSetCols];
+    TableScanDesc desc;
+    TupleTableSlot *slot;
+    bool val;
+    
+    setrel = table_open(setReloid, AccessShareLock);
+    /* default */
+    val = false;
+    
+    ScanKeyInit(&skey[0], Anum_spqr_global_settings_name,
+              BTEqualStrategyNumber, F_INT4EQ,
+              Int32GetDatum(setname));
+              
+    desc = table_beginscan(setrel, SnapshotAny, ResolveGlobalBoolSetCols, skey);
+    
+    slot = table_slot_create(setrel, NULL);
+
+    if (table_scan_getnextslot(desc, ForwardScanDirection, slot)) {
+
+        HeapTuple tuple;
+        char *raw_value;
+        text tval;
+        tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
+
+        tval = ((Form_GlobalSettings) GETSTRUCT(tuple))->value;
+
+	    raw_value = text_to_cstring(&tval);
+
+        if (strcmp(raw_value, "ok") == 0 || 
+            strcmp(raw_value, "yes") == 0 || 
+            strcmp(raw_value, "true") == 0 ||
+            strcmp(raw_value, "on") == 0) {
+            val = true;
+        }
+    }
+
+    systable_endscan(desc);
+    table_close(setrel, AccessShareLock);
+
+    return val;
+}
 
 static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
-    if (ctx->spqr_metadata_reloid == InvalidOid) {
-        ctx->spqr_metadata_reloid = SPQRGResolveDistrRelOid(SPQRGResolveMetadataSchemaOid());
+    if (ctx->spqr_d_metadata_reloid == InvalidOid)
+    {
+        Oid spqrguard_dr_schema = SPQRGResolveMetadataSchemaOid();
+        ctx->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema);
+        ctx->spqr_ref_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema);
+        ctx->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema);
     }
+
+    prevent_distributed_table_modify = ResolveGlobalBoolSetting(ctx->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
 }
 
 static spqrguard_distributedRelations cxt;

@@ -3,6 +3,16 @@
 
 CREATE SCHEMA spqr_metadata;
 
+CREATE TABLE spqr_metadata.spqr_global_settins (
+    name INTEGER,
+    value TEXT
+);
+
+/*
+* values
+* 42 = prevent_distributed_table_modify
+*/
+
 CREATE TABLE spqr_metadata.spqr_distributed_relations (
     reloid OID PRIMARY KEY REFERENCES pg_class(oid)
 );
