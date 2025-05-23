@@ -15,6 +15,9 @@
 
 #include "catalog/pg_namespace_d.h"
 #include "catalog/pg_namespace.h"
+#if PG_VERSION_NUM < 140000
+#include "catalog/indexing.h"
+#endif
 
 #include "utils/fmgroids.h"
 #include "utils/snapmgr.h"
