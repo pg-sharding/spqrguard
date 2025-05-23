@@ -110,7 +110,7 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
             return false;
         }
 
-        if (prevent_distributed_table_modify)
+        if (drs->prevent_distributed_table_modify)
             elog(ERROR, "unable to modify distributed relation within read-only transaction");
     }
 
@@ -264,7 +264,7 @@ static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
               BTEqualStrategyNumber, F_INT4EQ,
               Int32GetDatum(setname));
               
-    desc = table_beginscan(setrel, SnapshotAny, ResolveGlobalBoolSetCols, skey);
+    desc = table_beginscan(setrel, SnapshotSelf, ResolveGlobalBoolSetCols, skey);
     
     slot = table_slot_create(setrel, NULL);
 
@@ -308,10 +308,12 @@ static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
         }
     }
 
+    ctx->prevent_distributed_table_modify = prevent_distributed_table_modify;
+
     if (ctx->spqr_global_settings_reloid == InvalidOid) {
-        prevent_distributed_table_modify = false;
+        ctx->prevent_distributed_table_modify = false;
     } else {
-        prevent_distributed_table_modify = 
+        ctx->prevent_distributed_table_modify = 
             ResolveGlobalBoolSetting(ctx->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
     }
 }
