@@ -172,6 +172,7 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
 
 
 const char * spqrguard_dr_relname = "spqr_distributed_relations";
+const char * spqrguard_ref_relname = "spqr_reference_relations";
 const char * spqrguard_dr_schema = "spqr_metadata";
 const char * spqrguard_global_settings = "spqr_global_settings";
 
@@ -248,6 +249,44 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
     systable_endscan(scan);
 
     return DistrRelOid;
+}
+
+static Oid SPQRGResolveReferenceRelOid(Oid MetadataSchemaOid) {
+    Relation classrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    Oid ReferenceRelOid;
+    ScanKeyData skey[2];
+    Form_pg_class class_type;
+
+    ReferenceRelOid = InvalidOid;
+    
+    /* SELECT FROM pg_catalog.pg_class WHERE relname = 'spqr_distributed_relations '
+    * and relnamespace = $oid; */
+    /**/
+    
+    classrel = table_open(RelationRelationId, RowExclusiveLock);
+
+    ScanKeyInit(&skey[0], Anum_pg_class_relname, BTEqualStrategyNumber, F_NAMEEQ,
+                CStringGetDatum(spqrguard_ref_relname));
+
+    ScanKeyInit(&skey[1], Anum_pg_class_relnamespace, BTEqualStrategyNumber,
+                F_OIDEQ, ObjectIdGetDatum(MetadataSchemaOid));
+
+    scan = systable_beginscan(classrel, ClassNameNspIndexId, true, NULL, 2, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+	    class_type = (Form_pg_class) GETSTRUCT(tuple);
+        ReferenceRelOid = class_type->oid;
+    }
+
+    table_close(classrel, RowExclusiveLock);
+    systable_endscan(scan);
+
+    return ReferenceRelOid;
 }
 
 static Oid SPQRGResolveGlobalSettingsOid(Oid MetadataSchemaOid) {
@@ -359,7 +398,7 @@ static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
         } else {
             ctx->initialized = true;
             ctx->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
-            ctx->spqr_ref_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
+            ctx->spqr_ref_metadata_reloid = SPQRGResolveReferenceRelOid(spqrguard_dr_schema_oid);
             ctx->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema_oid);
         }
     }
