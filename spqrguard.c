@@ -403,9 +403,6 @@ static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
         }
     }
 
-    ctx->prevent_distributed_table_modify = prevent_distributed_table_modify;
-    ctx->prevent_reference_table_modify = prevent_reference_table_modify;
-
     if (ctx->spqr_global_settings_reloid == InvalidOid) {
         ctx->prevent_distributed_table_modify = false;
         ctx->prevent_reference_table_modify = false;
@@ -415,6 +412,10 @@ static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
         ctx->prevent_reference_table_modify = 
             ResolveGlobalBoolSetting(ctx->spqr_global_settings_reloid, PREVENT_REFERENCE_TABLE_MODIFY);
     }
+
+    /* Session-level GUC is allowed to override defualt to true, not vise-versa */
+    ctx->prevent_distributed_table_modify |= prevent_distributed_table_modify;
+    ctx->prevent_reference_table_modify |= prevent_reference_table_modify;
 }
 
 static spqrguard_distributedRelations cxt;
