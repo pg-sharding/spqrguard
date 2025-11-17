@@ -26,9 +26,3 @@ SELECT spqr_metadata.mark_distributed_relation('orders');
 SET spqrguard.prevent_distributed_table_modify TO true;
 INSERT INTO orders VALUES (1);  -- ERROR: unable to modify distributed relation within read-only transaction
 ```
-
-## Testing
-```sh
-make installcheck   # uses sql/simple.sql and expected/simple.out via pg_regress
-```
-Add new regression inputs under `sql/` with matching expected output under `expected/`, updating `REGRESS` in `Makefile` if you add more files.
