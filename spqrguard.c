@@ -36,8 +36,8 @@
 PG_MODULE_MAGIC;
 
 
-bool prevent_distributed_table_modify = false;
-bool prevent_reference_table_modify = false;
+static bool prevent_distributed_table_modify = false;
+static bool prevent_reference_table_modify = false;
 
 static ExecutorRun_hook_type prev_ExecutorRun_hook = NULL;
 
@@ -57,7 +57,11 @@ typedef struct spqrguard_distributedRelations {
 
 void
 spqrguard_ExecutorRun(QueryDesc *queryDesc,
-					 ScanDirection direction, uint64 count, bool execute_once);
+					 ScanDirection direction, uint64 count
+#if PG_VERSION_NUM < 180000
+                     , bool execute_once
+#endif
+                    );
 
 
 static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid relid) {
@@ -171,10 +175,10 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
 }
 
 
-const char * spqrguard_dr_relname = "spqr_distributed_relations";
-const char * spqrguard_ref_relname = "spqr_reference_relations";
-const char * spqrguard_dr_schema = "spqr_metadata";
-const char * spqrguard_global_settings = "spqr_global_settings";
+static const char * spqrguard_dr_relname = "spqr_distributed_relations";
+static const char * spqrguard_ref_relname = "spqr_reference_relations";
+static const char * spqrguard_dr_schema = "spqr_metadata";
+static const char * spqrguard_global_settings = "spqr_global_settings";
 
 /* It would be more handy to have FIXED-oid relations... */
 
@@ -420,6 +424,21 @@ static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
 
 static spqrguard_distributedRelations cxt;
 
+#if PG_VERSION_NUM >= 180000
+void
+spqrguard_ExecutorRun(QueryDesc *queryDesc,
+					 ScanDirection direction, uint64 count)
+{
+    populate_spqrguard(&cxt);
+
+    spqrguard_planstate_walker(queryDesc->planstate, &cxt);
+
+    (void)planstate_tree_walker(queryDesc->planstate, spqrguard_planstate_walker,
+								 &cxt);
+
+    (void) standard_ExecutorRun(queryDesc, direction, count);
+}
+#else
 void
 spqrguard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, uint64 count, bool execute_once)
@@ -433,8 +452,7 @@ spqrguard_ExecutorRun(QueryDesc *queryDesc,
 
     (void) standard_ExecutorRun(queryDesc, direction, count, execute_once);
 }
-
-
+#endif
 
 void
 _PG_init(void)
