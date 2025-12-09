@@ -15,6 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build the Docker image
-      run: docker build . --file docker/regress/Dockerfile --tag regress_test:1234 && docker run --entrypoint /home/build-user/docker/regress/run_tests.sh regress_test:1234
-      
-      
+      run: docker build . --file docker/regress/Dockerfile --tag regress_test:1234
+    - name: Run tests
+      run: docker run --entrypoint /spqrguard/docker/regress/run_tests.sh regress_test:1234
+
