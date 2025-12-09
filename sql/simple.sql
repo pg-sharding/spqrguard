@@ -22,6 +22,15 @@ SELECT spqr_metadata.unmark_distributed_relation ('spqr_d_t');
 
 INSERT INTO spqr_d_t VALUES (3);
 
+SET spqrguard.prevent_distributed_table_modify TO false;
+SET spqrguard.prevent_reference_table_modify TO true;
+
+INSERT INTO spqr_ref_t VALUES (2);
+
+SELECT spqr_metadata.unmark_reference_relation ('spqr_ref_t');
+
+INSERT INTO spqr_ref_t VALUES (3);
+
 DROP TABLE not_spqr_t, spqr_d_t, spqr_ref_t;
 
 DROP EXTENSION spqrguard;

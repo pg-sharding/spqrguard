@@ -63,10 +63,26 @@ $$
 LANGUAGE SQL;
 
 CREATE FUNCTION
-spqr_metadata.mark_reference_relation (relname TEXT) 
+spqr_metadata.mark_reference_relation (relname TEXT)
 RETURNS VOID AS
 $$
 SELECT spqr_metadata.mark_reference_relation((relname)::regclass::oid);
+$$
+LANGUAGE SQL;
+
+CREATE FUNCTION
+spqr_metadata.unmark_reference_relation (reloid OID)
+RETURNS VOID AS
+$$
+DELETE FROM spqr_metadata.spqr_reference_relations WHERE spqr_reference_relations.reloid = unmark_reference_relation.reloid;
+$$
+LANGUAGE SQL;
+
+CREATE FUNCTION
+spqr_metadata.unmark_reference_relation (relname TEXT)
+RETURNS VOID AS
+$$
+SELECT spqr_metadata.unmark_reference_relation((relname)::regclass::oid);
 $$
 LANGUAGE SQL;
 
