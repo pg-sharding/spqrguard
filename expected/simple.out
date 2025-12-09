@@ -34,9 +34,9 @@ SET spqrguard.prevent_reference_table_modify TO true;
 INSERT INTO spqr_ref_t VALUES (2);
 ERROR:  unable to modify SPQR reference relation within read-only transaction
 SELECT spqr_metadata.unmark_reference_relation ('spqr_ref_t');
- unmark_reference_relation
+ unmark_reference_relation 
 ---------------------------
-
+ 
 (1 row)
 
 INSERT INTO spqr_ref_t VALUES (3);
