@@ -1,6 +1,8 @@
 -- complain if script is sourced in psql, rather than via CREATE EXTENSION
 \echo Use "CREATE EXTENSION spqrguard" to load this file. \quit
 
+SET allow_system_table_mods = true;
+
 CREATE SCHEMA spqr_metadata;
 
 CREATE TABLE spqr_metadata.spqr_global_settings (
@@ -127,3 +129,5 @@ BEGIN
 
 END;
 $$ LANGUAGE PLPGSQL;
+
+RESET allow_system_table_mods;
