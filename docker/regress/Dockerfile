@@ -10,3 +10,5 @@ COPY . /spqrguard
 WORKDIR /spqrguard
 
 RUN make USE_PGXS=1 && make USE_PGXS=1 install
+
+ENTRYPOINT [ "/spqrguard/docker/regress/run_tests.sh" ]
