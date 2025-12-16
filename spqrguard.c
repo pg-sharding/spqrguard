@@ -388,8 +388,7 @@ static Oid SPQRGResolveGlobalSettingsOid(Oid MetadataSchemaOid) {
 
 typedef struct Form_DataGlobalSettings {
     int32_t name;
-
-    text value;
+    bool value;
 } Form_DataGlobalSettings;
 
 typedef Form_DataGlobalSettings *Form_GlobalSettings;
@@ -423,20 +422,9 @@ static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
     if (table_scan_getnextslot(desc, ForwardScanDirection, slot)) {
 
         HeapTuple tuple;
-        char *raw_value;
-        text tval;
         tuple = ExecFetchSlotHeapTuple(slot, false, NULL);
 
-        tval = ((Form_GlobalSettings) GETSTRUCT(tuple))->value;
-
-	    raw_value = text_to_cstring(&tval);
-
-        if (strcmp(raw_value, "ok") == 0 || 
-            strcmp(raw_value, "yes") == 0 || 
-            strcmp(raw_value, "true") == 0 ||
-            strcmp(raw_value, "on") == 0) {
-            val = true;
-        }
+        val = ((Form_GlobalSettings) GETSTRUCT(tuple))->value;
     }
 
     ExecDropSingleTupleTableSlot(slot);
