@@ -27,6 +27,18 @@ INSERT INTO spqr_metadata.spqr_global_settings (name, value) VALUES (69, 'yes');
 
 INSERT INTO spqr_ref_t VALUES (2);
 
+UPDATE spqr_metadata.spqr_global_settings SET value = 'ok' WHERE name = 69;
+
+INSERT INTO spqr_ref_t VALUES (2);
+
+UPDATE spqr_metadata.spqr_global_settings SET value = 'on' WHERE name = 69;
+
+INSERT INTO spqr_ref_t VALUES (2);
+
+UPDATE spqr_metadata.spqr_global_settings SET value = 'true' WHERE name = 69;
+
+INSERT INTO spqr_ref_t VALUES (2);
+
 SELECT spqr_metadata.unmark_reference_relation ('spqr_ref_t');
 
 INSERT INTO spqr_ref_t VALUES (3);
