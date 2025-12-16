@@ -30,17 +30,68 @@
 
 #include "fmgr.h"
 
+#include "nodes/queryjumble.h"
+#include "tcop/utility.h"
+#include "storage/lmgr.h"
 #include "utils/builtins.h"
 #include "utils/guc.h"
 
 PG_MODULE_MAGIC;
 
+static void spqrguard_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count);
+static void spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
+					bool readOnlyTree,
+					ProcessUtilityContext context,
+					ParamListInfo params, QueryEnvironment *queryEnv,
+					DestReceiver *dest, QueryCompletion *qc);
+
+
+static ExecutorRun_hook_type prev_ExecutorRun_hook = NULL;
+static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
 
 static bool prevent_distributed_table_modify = false;
 static bool prevent_reference_table_modify = false;
+static bool any_modification = false;
 
-static ExecutorRun_hook_type prev_ExecutorRun_hook = NULL;
+void
+_PG_init(void)
+{
+	if (!process_shared_preload_libraries_in_progress)
+	{
+		elog(ERROR, "This module can only be loaded via shared_preload_libraries");
+		return;
+	}
 
+    DefineCustomBoolVariable("spqrguard.prevent_reference_table_modify",
+                            "Restrict sql referencing one of SPQR reference relations to be read-only",
+                            "Default of false",
+                            &prevent_reference_table_modify,
+                            false,
+                            PGC_SUSET,
+                            GUC_NOT_IN_SAMPLE,
+                            NULL,
+                            NULL,
+                            NULL);
+
+    DefineCustomBoolVariable("spqrguard.prevent_distributed_table_modify",
+                            "Restrict sql referencing one of SPQR distributed relations to be read-only",
+                            "Default of false",
+                            &prevent_distributed_table_modify,
+                            false,
+                            PGC_SUSET,
+                            GUC_NOT_IN_SAMPLE,
+                            NULL,
+                            NULL,
+                            NULL);
+
+#if PG_VERSION_NUM >= 130000
+	prev_ExecutorRun_hook = ExecutorRun_hook;
+	ExecutorRun_hook = spqrguard_ExecutorRun;
+    prev_ProcessUtility_hook = ProcessUtility_hook;
+    ProcessUtility_hook = spqrguard_ProcessUtility;
+#endif
+
+}
 
 typedef struct spqrguard_distributedRelations {
     Oid spqr_d_metadata_reloid;
@@ -166,6 +217,7 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
         }
         
         if (spqrguard_check_ref_relation(drs, relid)) {
+            any_modification = true;
             if (drs->prevent_reference_table_modify)
                 elog(ERROR, "unable to modify SPQR reference relation within read-only transaction");
         }
@@ -422,72 +474,84 @@ static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
     ctx->prevent_reference_table_modify |= prevent_reference_table_modify;
 }
 
-static spqrguard_distributedRelations cxt;
+static spqrguard_distributedRelations ctx;
 
 #if PG_VERSION_NUM >= 180000
-void
+static void
 spqrguard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, uint64 count)
 {
-    populate_spqrguard(&cxt);
+    populate_spqrguard(&ctx);
 
-    spqrguard_planstate_walker(queryDesc->planstate, &cxt);
+    spqrguard_planstate_walker(queryDesc->planstate, &ctx);
 
     (void)planstate_tree_walker(queryDesc->planstate, spqrguard_planstate_walker,
-								 &cxt);
+								 &ctx);
 
-    (void) standard_ExecutorRun(queryDesc, direction, count);
+    if (prev_ExecutorRun_hook)
+        (void) prev_ExecutorRun_hook(queryDesc, direction, count);
+    else
+        (void) standard_ExecutorRun(queryDesc, direction, count);
 }
 #else
 void
 spqrguard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, uint64 count, bool execute_once)
 {
-    populate_spqrguard(&cxt);
+    populate_spqrguard(&ctx);
 
-    spqrguard_planstate_walker(queryDesc->planstate, &cxt);
+    spqrguard_planstate_walker(queryDesc->planstate, &ctx);
 
     (void)planstate_tree_walker(queryDesc->planstate, spqrguard_planstate_walker,
-								 &cxt);
+								 &ctx);
 
-    (void) standard_ExecutorRun(queryDesc, direction, count, execute_once);
+    if (prev_ExecutorRun_hook)
+        (void) prev_ExecutorRun_hook(queryDesc, direction, count, execute_once);
+    else
+        (void) standard_ExecutorRun(queryDesc, direction, count, execute_once);
 }
 #endif
 
-void
-_PG_init(void)
+// TODO: executor run => utility shit && lock settings table
+static void
+spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
+					bool readOnlyTree,
+					ProcessUtilityContext context,
+					ParamListInfo params, QueryEnvironment *queryEnv,
+					DestReceiver *dest, QueryCompletion *qc)
 {
-	if (!process_shared_preload_libraries_in_progress)
-	{
-		elog(ERROR, "This module can only be loaded via shared_preload_libraries");
-		return;
-	}
+	Node	   *parsetree = pstmt->utilityStmt;
+    if (IsA(parsetree, TransactionStmt)) {
+        TransactionStmt *stmt = (TransactionStmt *) parsetree;
+        if (stmt->kind == TRANS_STMT_COMMIT || stmt->kind == TRANS_STMT_PREPARE) { // mb prepare transaction too
+            populate_spqrguard(&ctx);
 
-    DefineCustomBoolVariable("spqrguard.prevent_reference_table_modify",
-                            "Restrict sql referencing one of SPQR reference relations to be read-only",
-                            "Default of false",
-                            &prevent_reference_table_modify,
-                            false,
-                            PGC_SUSET,
-                            GUC_NOT_IN_SAMPLE,
-                            NULL,
-                            NULL,
-                            NULL);
+            if (any_modification) {
+                elog(WARNING, "Found pidor");
+                
+			    LockRelationOid(ctx.spqr_global_settings_reloid, AccessShareLock);
+                populate_spqrguard(&ctx);
+                if (ctx.prevent_reference_table_modify) {
+                    elog(ERROR, "unable to modify SPQR distributed relation within read-only transaction");
+                }
+            }
 
-    DefineCustomBoolVariable("spqrguard.prevent_distributed_table_modify",
-                            "Restrict sql referencing one of SPQR distributed relations to be read-only",
-                            "Default of false",
-                            &prevent_distributed_table_modify,
-                            false,
-                            PGC_SUSET,
-                            GUC_NOT_IN_SAMPLE,
-                            NULL,
-                            NULL,
-                            NULL);
+        }
+        if (stmt->kind == TRANS_STMT_COMMIT || stmt->kind == TRANS_STMT_PREPARE || stmt->kind == TRANS_STMT_ROLLBACK || stmt->kind == TRANS_STMT_BEGIN) {
+            any_modification = false;
+        }
+    }  
 
-#if PG_VERSION_NUM >= 130000
-	prev_ExecutorRun_hook = ExecutorRun_hook;
-	ExecutorRun_hook = spqrguard_ExecutorRun;
-#endif
 
+
+    {
+        if (prev_ProcessUtility_hook)
+            prev_ProcessUtility_hook(pstmt, queryString, readOnlyTree,
+                                context, params, queryEnv,
+                                dest, qc);
+        else
+            standard_ProcessUtility(pstmt, queryString, readOnlyTree,
+                                    context, params, queryEnv,
+                                    dest, qc);
+    }
 }
