@@ -37,7 +37,11 @@
 
 PG_MODULE_MAGIC;
 
+#if PG_VERSION_NUM >= 180000
 static void spqrguard_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count);
+#else
+static void spqrguard_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count, bool execute_once);
+#endif
 static void spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
 					bool readOnlyTree,
 					ProcessUtilityContext context,
