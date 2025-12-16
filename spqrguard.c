@@ -118,7 +118,7 @@ spqrguard_ExecutorRun(QueryDesc *queryDesc,
                     );
 
 
-static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid relid) {
+static bool spqrguard_check_relation(spqrguard_distributedRelations *cxt, Oid relid) {
     /* NOOP for now */
     Relation spqrrel;
     SysScanDesc scan;
@@ -130,12 +130,12 @@ static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid re
 
     /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
     /**/
-    if (!ctx->initialized)
+    if (!cxt->initialized)
     {
 	    res = true;
 	    return res;
     }
-    spqrrel = table_open(ctx->spqr_d_metadata_reloid, AccessShareLock);
+    spqrrel = table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
 
 #define Anum_spqr_distributed_relations_reloid 1
 
@@ -157,7 +157,7 @@ static bool spqrguard_check_relation(spqrguard_distributedRelations *ctx, Oid re
     return res;
 }
 
-static bool spqrguard_check_ref_relation(spqrguard_distributedRelations *ctx, Oid relid) {
+static bool spqrguard_check_ref_relation(spqrguard_distributedRelations *cxt, Oid relid) {
     /* NOOP for now */
     Relation spqrrel;
     SysScanDesc scan;
@@ -169,12 +169,12 @@ static bool spqrguard_check_ref_relation(spqrguard_distributedRelations *ctx, Oi
 
     /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
     /**/
-    if (!ctx->initialized)
+    if (!cxt->initialized)
     {
 	    res = true;
 	    return res;
     }
-    spqrrel = table_open(ctx->spqr_ref_metadata_reloid, AccessShareLock);
+    spqrrel = table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
 
 #define Anum_spqr_reference_relations_reloid 1
 
@@ -447,49 +447,49 @@ static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
     return val;
 }
 
-static void populate_spqrguard(spqrguard_distributedRelations *ctx) {
-    if (ctx->spqr_d_metadata_reloid == InvalidOid)
+static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
+    if (cxt->spqr_d_metadata_reloid == InvalidOid)
     {
         Oid spqrguard_dr_schema_oid = SPQRGResolveMetadataSchemaOid();
         if (spqrguard_dr_schema_oid == InvalidOid) {
             /* extension not created yet, but hook is already in-place. */
-            ctx->initialized = false;
+            cxt->initialized = false;
         } else {
-            ctx->initialized = true;
-            ctx->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
-            ctx->spqr_ref_metadata_reloid = SPQRGResolveReferenceRelOid(spqrguard_dr_schema_oid);
-            ctx->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema_oid);
+            cxt->initialized = true;
+            cxt->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
+            cxt->spqr_ref_metadata_reloid = SPQRGResolveReferenceRelOid(spqrguard_dr_schema_oid);
+            cxt->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema_oid);
         }
     }
 
-    if (ctx->spqr_global_settings_reloid == InvalidOid) {
-        ctx->prevent_distributed_table_modify = false;
-        ctx->prevent_reference_table_modify = false;
+    if (cxt->spqr_global_settings_reloid == InvalidOid) {
+        cxt->prevent_distributed_table_modify = false;
+        cxt->prevent_reference_table_modify = false;
     } else {
-        ctx->prevent_distributed_table_modify = 
-            ResolveGlobalBoolSetting(ctx->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
-        ctx->prevent_reference_table_modify = 
-            ResolveGlobalBoolSetting(ctx->spqr_global_settings_reloid, PREVENT_REFERENCE_TABLE_MODIFY);
+        cxt->prevent_distributed_table_modify = 
+            ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
+        cxt->prevent_reference_table_modify = 
+            ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_REFERENCE_TABLE_MODIFY);
     }
 
     /* Session-level GUC is allowed to override defualt to true, not vise-versa */
-    ctx->prevent_distributed_table_modify |= prevent_distributed_table_modify;
-    ctx->prevent_reference_table_modify |= prevent_reference_table_modify;
+    cxt->prevent_distributed_table_modify |= prevent_distributed_table_modify;
+    cxt->prevent_reference_table_modify |= prevent_reference_table_modify;
 }
 
-static spqrguard_distributedRelations ctx;
+static spqrguard_distributedRelations cxt;
 
 #if PG_VERSION_NUM >= 180000
 static void
 spqrguard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, uint64 count)
 {
-    populate_spqrguard(&ctx);
+    populate_spqrguard(&cxt);
 
-    spqrguard_planstate_walker(queryDesc->planstate, &ctx);
+    spqrguard_planstate_walker(queryDesc->planstate, &cxt);
 
     (void)planstate_tree_walker(queryDesc->planstate, spqrguard_planstate_walker,
-								 &ctx);
+								 &cxt);
 
     if (prev_ExecutorRun_hook)
         (void) prev_ExecutorRun_hook(queryDesc, direction, count);
@@ -501,12 +501,12 @@ void
 spqrguard_ExecutorRun(QueryDesc *queryDesc,
 					 ScanDirection direction, uint64 count, bool execute_once)
 {
-    populate_spqrguard(&ctx);
+    populate_spqrguard(&cxt);
 
-    spqrguard_planstate_walker(queryDesc->planstate, &ctx);
+    spqrguard_planstate_walker(queryDesc->planstate, &cxt);
 
     (void)planstate_tree_walker(queryDesc->planstate, spqrguard_planstate_walker,
-								 &ctx);
+								 &cxt);
 
     if (prev_ExecutorRun_hook)
         (void) prev_ExecutorRun_hook(queryDesc, direction, count, execute_once);
@@ -527,14 +527,14 @@ spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
     if (IsA(parsetree, TransactionStmt)) {
         TransactionStmt *stmt = (TransactionStmt *) parsetree;
         if (stmt->kind == TRANS_STMT_COMMIT || stmt->kind == TRANS_STMT_PREPARE) { // mb prepare transaction too
-            populate_spqrguard(&ctx);
+            populate_spqrguard(&cxt);
 
             if (any_modification) {
                 elog(WARNING, "Found pidor");
                 
-			    LockRelationOid(ctx.spqr_global_settings_reloid, AccessShareLock);
-                populate_spqrguard(&ctx);
-                if (ctx.prevent_reference_table_modify) {
+			    LockRelationOid(cxt.spqr_global_settings_reloid, AccessShareLock);
+                populate_spqrguard(&cxt);
+                if (cxt.prevent_reference_table_modify) {
                     elog(ERROR, "unable to modify SPQR distributed relation within read-only transaction");
                 }
             }
