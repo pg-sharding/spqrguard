@@ -30,7 +30,6 @@
 
 #include "fmgr.h"
 
-#include "nodes/queryjumble.h"
 #include "tcop/utility.h"
 #include "storage/lmgr.h"
 #include "utils/builtins.h"
