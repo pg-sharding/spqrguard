@@ -42,11 +42,19 @@ static void spqrguard_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction,
 #else
 static void spqrguard_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count, bool execute_once);
 #endif
+
+#if PG_VERSION_NUM >= 140000
 static void spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
 					bool readOnlyTree,
 					ProcessUtilityContext context,
 					ParamListInfo params, QueryEnvironment *queryEnv,
 					DestReceiver *dest, QueryCompletion *qc);
+#else
+static void spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
+					ProcessUtilityContext context,
+					ParamListInfo params, QueryEnvironment *queryEnv,
+					DestReceiver *dest, QueryCompletion *qc);
+#endif
 
 
 static ExecutorRun_hook_type prev_ExecutorRun_hook = NULL;
@@ -504,6 +512,7 @@ spqrguard_ExecutorRun(QueryDesc *queryDesc,
 #endif
 
 // TODO: executor run => utility shit && lock settings table
+#if PG_VERSION_NUM >= 140000
 static void
 spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
 					bool readOnlyTree,
@@ -519,7 +528,7 @@ spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
 
             if (any_modification) {
                 elog(WARNING, "Found pidor");
-                
+
 			    LockRelationOid(cxt.spqr_global_settings_reloid, AccessShareLock);
                 populate_spqrguard(&cxt);
                 if (cxt.prevent_reference_table_modify) {
@@ -531,18 +540,53 @@ spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
         if (stmt->kind == TRANS_STMT_COMMIT || stmt->kind == TRANS_STMT_PREPARE || stmt->kind == TRANS_STMT_ROLLBACK || stmt->kind == TRANS_STMT_BEGIN) {
             any_modification = false;
         }
-    }  
+    }
 
-
-
-    {
-        if (prev_ProcessUtility_hook)
-            prev_ProcessUtility_hook(pstmt, queryString, readOnlyTree,
+    if (prev_ProcessUtility_hook)
+        prev_ProcessUtility_hook(pstmt, queryString, readOnlyTree,
+                            context, params, queryEnv,
+                            dest, qc);
+    else
+        standard_ProcessUtility(pstmt, queryString, readOnlyTree,
                                 context, params, queryEnv,
                                 dest, qc);
-        else
-            standard_ProcessUtility(pstmt, queryString, readOnlyTree,
-                                    context, params, queryEnv,
-                                    dest, qc);
-    }
 }
+#else
+static void
+spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
+					ProcessUtilityContext context,
+					ParamListInfo params, QueryEnvironment *queryEnv,
+					DestReceiver *dest, QueryCompletion *qc)
+{
+	Node	   *parsetree = pstmt->utilityStmt;
+    if (IsA(parsetree, TransactionStmt)) {
+        TransactionStmt *stmt = (TransactionStmt *) parsetree;
+        if (stmt->kind == TRANS_STMT_COMMIT || stmt->kind == TRANS_STMT_PREPARE) { // mb prepare transaction too
+            populate_spqrguard(&cxt);
+
+            if (any_modification) {
+                elog(WARNING, "Found pidor");
+
+			    LockRelationOid(cxt.spqr_global_settings_reloid, AccessShareLock);
+                populate_spqrguard(&cxt);
+                if (cxt.prevent_reference_table_modify) {
+                    elog(ERROR, "unable to modify SPQR distributed relation within read-only transaction");
+                }
+            }
+
+        }
+        if (stmt->kind == TRANS_STMT_COMMIT || stmt->kind == TRANS_STMT_PREPARE || stmt->kind == TRANS_STMT_ROLLBACK || stmt->kind == TRANS_STMT_BEGIN) {
+            any_modification = false;
+        }
+    }
+
+    if (prev_ProcessUtility_hook)
+        prev_ProcessUtility_hook(pstmt, queryString,
+                            context, params, queryEnv,
+                            dest, qc);
+    else
+        standard_ProcessUtility(pstmt, queryString,
+                                context, params, queryEnv,
+                                dest, qc);
+}
+#endif
