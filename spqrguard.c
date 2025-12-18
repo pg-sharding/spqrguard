@@ -135,7 +135,16 @@ static bool spqrguard_check_relation(spqrguard_distributedRelations *cxt, Oid re
 	    res = true;
 	    return res;
     }
-    spqrrel = table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
+    spqrrel = try_table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
+    if (spqrrel == NULL) {
+        Oid spqrguard_dr_schema_oid = SPQRGResolveMetadataSchemaOid();
+        if (spqrguard_dr_schema_oid != InvalidOid) {
+            cxt->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
+            spqrrel = table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
+        } else {
+            elog(ERROR, "spqr_metadata schema not found");
+        }
+    }
 
 #define Anum_spqr_distributed_relations_reloid 1
 
@@ -174,7 +183,16 @@ static bool spqrguard_check_ref_relation(spqrguard_distributedRelations *cxt, Oi
 	    res = true;
 	    return res;
     }
-    spqrrel = table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
+    spqrrel = try_table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
+    if (spqrrel == NULL) {
+        Oid spqrguard_dr_schema_oid = SPQRGResolveMetadataSchemaOid();
+        if (spqrguard_dr_schema_oid != InvalidOid) {
+            cxt->spqr_ref_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
+            spqrrel = table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
+        } else {
+            elog(ERROR, "spqr_metadata schema not found");
+        }
+    }
 
 #define Anum_spqr_reference_relations_reloid 1
 
@@ -454,13 +472,27 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
         cxt->prevent_distributed_table_modify = false;
         cxt->prevent_reference_table_modify = false;
     } else {
+        Relation global_settings_table = try_table_open(cxt->spqr_global_settings_reloid, AccessShareLock);
+
+        if (global_settings_table == NULL) {
+            Oid spqrguard_dr_schema_oid = SPQRGResolveMetadataSchemaOid();
+            if (spqrguard_dr_schema_oid != InvalidOid) {
+                cxt->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
+                cxt->spqr_ref_metadata_reloid = SPQRGResolveReferenceRelOid(spqrguard_dr_schema_oid);
+                cxt->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema_oid);
+            } else {
+                elog(ERROR, "spqr_metadata schema not found");
+            }
+        } else {
+            table_close(global_settings_table, AccessShareLock);
+        }
         cxt->prevent_distributed_table_modify = 
             ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
         cxt->prevent_reference_table_modify = 
             ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_REFERENCE_TABLE_MODIFY);
     }
 
-    /* Session-level GUC is allowed to override defualt to true, not vise-versa */
+    /* Session-level GUC is allowed to override default to true, not vise-versa */
     cxt->prevent_distributed_table_modify |= prevent_distributed_table_modify;
     cxt->prevent_reference_table_modify |= prevent_reference_table_modify;
 }
