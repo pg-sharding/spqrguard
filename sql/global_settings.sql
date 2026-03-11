@@ -18,7 +18,7 @@ INSERT INTO not_spqr_t VALUES (2);
 
 INSERT INTO spqr_d_t VALUES (2);
 
-SET spqrguard.prevent_distributed_table_modify TO false;
+SET spqrguard.prevent_distributed_table_modify TO 'off';
 
 INSERT INTO spqr_d_t VALUES (3);
 
@@ -31,7 +31,7 @@ INSERT INTO spqr_metadata.spqr_global_settings (name, enabled) VALUES (69, true)
 
 INSERT INTO spqr_ref_t VALUES (2);
 
-SET spqrguard.prevent_reference_table_modify TO false;
+SET spqrguard.prevent_reference_table_modify TO 'off';
 
 INSERT INTO spqr_ref_t VALUES (3);
 
