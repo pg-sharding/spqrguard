@@ -15,21 +15,47 @@ INSERT INTO spqr_ref_t VALUES (1);
 SET spqrguard.prevent_distributed_table_modify TO 'on';
 
 INSERT INTO not_spqr_t VALUES (2);
-
 INSERT INTO spqr_d_t VALUES (2);
 
-SELECT spqr_metadata.unmark_distributed_relation ('spqr_d_t');
+SET spqrguard.prevent_distributed_table_modify TO 'off';
 
+INSERT INTO not_spqr_t VALUES (3);
 INSERT INTO spqr_d_t VALUES (3);
 
+SELECT spqr_metadata.unmark_distributed_relation ('spqr_d_t');
+SET spqrguard.prevent_distributed_table_modify TO 'unset';
+
+INSERT INTO spqr_d_t VALUES (4);
+
+SET spqrguard.prevent_distributed_table_modify TO 'on';
+
+INSERT INTO spqr_d_t VALUES (5);
+
 SET spqrguard.prevent_distributed_table_modify TO 'off';
+
+INSERT INTO spqr_d_t VALUES (6);
+
+SET spqrguard.prevent_distributed_table_modify TO 'unset';
 SET spqrguard.prevent_reference_table_modify TO 'on';
 
 INSERT INTO spqr_ref_t VALUES (2);
 
-SELECT spqr_metadata.unmark_reference_relation ('spqr_ref_t');
+SET spqrguard.prevent_reference_table_modify TO 'off';
 
 INSERT INTO spqr_ref_t VALUES (3);
+
+SELECT spqr_metadata.unmark_reference_relation ('spqr_ref_t');
+SET spqrguard.prevent_distributed_table_modify TO 'unset';
+
+INSERT INTO spqr_ref_t VALUES (4);
+
+SET spqrguard.prevent_reference_table_modify TO 'on';
+
+INSERT INTO spqr_ref_t VALUES (5);
+
+SET spqrguard.prevent_reference_table_modify TO 'off';
+
+INSERT INTO spqr_ref_t VALUES (6);
 
 DROP TABLE not_spqr_t, spqr_d_t, spqr_ref_t;
 
