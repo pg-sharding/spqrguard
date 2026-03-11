@@ -52,8 +52,15 @@ static void spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString
 static ExecutorRun_hook_type prev_ExecutorRun_hook = NULL;
 static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
 
-static bool prevent_distributed_table_modify = false;
-static bool prevent_reference_table_modify = false;
+const struct config_enum_entry spqrguard_guc_opts[] = {
+    {"unset", 0, false},
+    {"on", 1, false},
+    {"off", 2, false},
+    {NULL, 0, false}
+};
+
+static int prevent_distributed_table_modify = 0;
+static int prevent_reference_table_modify = 0;
 static bool any_modification = false;
 
 void
@@ -65,23 +72,25 @@ _PG_init(void)
 		return;
 	}
 
-    DefineCustomBoolVariable("spqrguard.prevent_reference_table_modify",
+    DefineCustomEnumVariable("spqrguard.prevent_reference_table_modify",
                             "Restrict sql referencing one of SPQR reference relations to be read-only",
-                            "Default of false",
+                            "Defaults to 'unset'",
                             &prevent_reference_table_modify,
-                            false,
-                            PGC_SUSET,
+                            0,
+                            spqrguard_guc_opts,
+                            PGC_USERSET,
                             GUC_NOT_IN_SAMPLE,
                             NULL,
                             NULL,
                             NULL);
 
-    DefineCustomBoolVariable("spqrguard.prevent_distributed_table_modify",
+    DefineCustomEnumVariable("spqrguard.prevent_distributed_table_modify",
                             "Restrict sql referencing one of SPQR distributed relations to be read-only",
-                            "Default of false",
+                            "Defaults to unset",
                             &prevent_distributed_table_modify,
-                            false,
-                            PGC_SUSET,
+                            0,
+                            spqrguard_guc_opts,
+                            PGC_USERSET,
                             GUC_NOT_IN_SAMPLE,
                             NULL,
                             NULL,
@@ -116,6 +125,118 @@ spqrguard_ExecutorRun(QueryDesc *queryDesc,
                      , bool execute_once
 #endif
                     );
+
+
+static bool spqrguard_check_relation(spqrguard_distributedRelations *cxt, Oid relid) {
+    /* NOOP for now */
+    Relation spqrrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    bool    res;
+    ScanKeyData skey[1];
+
+    res = false;
+
+    /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
+    /**/
+    if (!cxt->initialized)
+    {
+	    res = true;
+	    return res;
+    }
+    spqrrel = table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
+
+#define Anum_spqr_distributed_relations_reloid 1
+
+    ScanKeyInit(&skey[0], Anum_spqr_distributed_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
+                ObjectIdGetDatum(relid));
+
+    scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 1, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+        res = true;
+    }
+
+    table_close(spqrrel, AccessShareLock);
+    systable_endscan(scan);
+
+    return res;
+}
+
+static bool spqrguard_check_ref_relation(spqrguard_distributedRelations *cxt, Oid relid) {
+    /* NOOP for now */
+    Relation spqrrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    bool    res;
+    ScanKeyData skey[1];
+
+    res = false;
+
+    /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
+    /**/
+    if (!cxt->initialized)
+    {
+	    res = true;
+	    return res;
+    }
+    spqrrel = table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
+
+#define Anum_spqr_reference_relations_reloid 1
+
+    ScanKeyInit(&skey[0], Anum_spqr_reference_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
+                ObjectIdGetDatum(relid));
+
+    scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 1, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+        res = true;
+    }
+
+    table_close(spqrrel, AccessShareLock);
+    systable_endscan(scan);
+
+    return res;
+}
+
+/*
+
+typedef bool (*planstate_tree_walker_callback) (struct PlanState *planstate,
+												void *context);
+*/
+
+static bool spqrguard_planstate_walker(struct PlanState *planstate,
+												void *context) {
+    if (IsA(planstate, ModifyTableState)) {
+        ModifyTableState *mts;
+        Oid relid;
+
+        spqrguard_distributedRelations *drs = context;
+
+        mts = (ModifyTableState*) planstate;
+
+        relid = RelationGetRelid(mts->resultRelInfo->ri_RelationDesc);
+
+        if (spqrguard_check_relation(drs, relid)) {
+            if (drs->prevent_distributed_table_modify)
+                elog(ERROR, "unable to modify SPQR distributed relation within read-only transaction");
+        }
+        
+        if (spqrguard_check_ref_relation(drs, relid)) {
+            any_modification = true;
+            if (drs->prevent_reference_table_modify)
+                elog(ERROR, "unable to modify SPQR reference relation within read-only transaction");
+        }
+    }
+
+    return false;
+}
 
 
 static const char * spqrguard_dr_relname = "spqr_distributed_relations";
@@ -274,136 +395,6 @@ static Oid SPQRGResolveGlobalSettingsOid(Oid MetadataSchemaOid) {
     return SetRelOid;
 }
 
-
-static bool spqrguard_check_relation(spqrguard_distributedRelations *cxt, Oid relid) {
-    /* NOOP for now */
-    Relation spqrrel;
-    SysScanDesc scan;
-    HeapTuple tuple;
-    bool    res;
-    ScanKeyData skey[1];
-
-    res = false;
-
-    /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
-    /**/
-    if (!cxt->initialized)
-    {
-	    res = true;
-	    return res;
-    }
-    spqrrel = try_table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
-    if (spqrrel == NULL) {
-        Oid spqrguard_dr_schema_oid = SPQRGResolveMetadataSchemaOid();
-        if (spqrguard_dr_schema_oid != InvalidOid) {
-            cxt->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
-            spqrrel = table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
-        } else {
-            elog(ERROR, "spqr_metadata schema not found");
-        }
-    }
-
-#define Anum_spqr_distributed_relations_reloid 1
-
-    ScanKeyInit(&skey[0], Anum_spqr_distributed_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
-                ObjectIdGetDatum(relid));
-
-    scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 1, skey);
-    
-    tuple = systable_getnext(scan);
-
-    /* No map relation created. return invalid oid */
-    if (HeapTupleIsValid(tuple)) {
-        res = true;
-    }
-
-    table_close(spqrrel, AccessShareLock);
-    systable_endscan(scan);
-
-    return res;
-}
-
-static bool spqrguard_check_ref_relation(spqrguard_distributedRelations *cxt, Oid relid) {
-    /* NOOP for now */
-    Relation spqrrel;
-    SysScanDesc scan;
-    HeapTuple tuple;
-    bool    res;
-    ScanKeyData skey[1];
-
-    res = false;
-
-    /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
-    /**/
-    if (!cxt->initialized)
-    {
-	    res = true;
-	    return res;
-    }
-    spqrrel = try_table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
-    if (spqrrel == NULL) {
-        Oid spqrguard_dr_schema_oid = SPQRGResolveMetadataSchemaOid();
-        if (spqrguard_dr_schema_oid != InvalidOid) {
-            cxt->spqr_ref_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
-            spqrrel = table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
-        } else {
-            elog(ERROR, "spqr_metadata schema not found");
-        }
-    }
-
-#define Anum_spqr_reference_relations_reloid 1
-
-    ScanKeyInit(&skey[0], Anum_spqr_reference_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
-                ObjectIdGetDatum(relid));
-
-    scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 1, skey);
-    
-    tuple = systable_getnext(scan);
-
-    /* No map relation created. return invalid oid */
-    if (HeapTupleIsValid(tuple)) {
-        res = true;
-    }
-
-    table_close(spqrrel, AccessShareLock);
-    systable_endscan(scan);
-
-    return res;
-}
-
-/*
-
-typedef bool (*planstate_tree_walker_callback) (struct PlanState *planstate,
-												void *context);
-*/
-
-static bool spqrguard_planstate_walker(struct PlanState *planstate,
-												void *context) {
-    if (IsA(planstate, ModifyTableState)) {
-        ModifyTableState *mts;
-        Oid relid;
-
-        spqrguard_distributedRelations *drs = context;
-
-        mts = (ModifyTableState*) planstate;
-
-        relid = RelationGetRelid(mts->resultRelInfo->ri_RelationDesc);
-
-        if (spqrguard_check_relation(drs, relid)) {
-            if (drs->prevent_distributed_table_modify)
-                elog(ERROR, "unable to modify SPQR distributed relation within read-only transaction");
-        }
-        
-        if (spqrguard_check_ref_relation(drs, relid)) {
-            any_modification = true;
-            if (drs->prevent_reference_table_modify)
-                elog(ERROR, "unable to modify SPQR reference relation within read-only transaction");
-        }
-    }
-
-    return false;
-}
-
 typedef struct Form_DataGlobalSettings {
     int32_t name;
     bool value;
@@ -472,20 +463,6 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
         cxt->prevent_distributed_table_modify = false;
         cxt->prevent_reference_table_modify = false;
     } else {
-        Relation global_settings_table = try_table_open(cxt->spqr_global_settings_reloid, AccessShareLock);
-
-        if (global_settings_table == NULL) {
-            Oid spqrguard_dr_schema_oid = SPQRGResolveMetadataSchemaOid();
-            if (spqrguard_dr_schema_oid != InvalidOid) {
-                cxt->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
-                cxt->spqr_ref_metadata_reloid = SPQRGResolveReferenceRelOid(spqrguard_dr_schema_oid);
-                cxt->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema_oid);
-            } else {
-                elog(ERROR, "spqr_metadata schema not found");
-            }
-        } else {
-            table_close(global_settings_table, AccessShareLock);
-        }
         cxt->prevent_distributed_table_modify = 
             ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
         cxt->prevent_reference_table_modify = 
@@ -493,8 +470,28 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
     }
 
     /* Session-level GUC is allowed to override default to true, not vise-versa */
-    cxt->prevent_distributed_table_modify |= prevent_distributed_table_modify;
-    cxt->prevent_reference_table_modify |= prevent_reference_table_modify;
+    switch (prevent_distributed_table_modify) 
+    {
+    case 1:
+        cxt->prevent_distributed_table_modify = true;
+        break;
+    case 2:
+        cxt->prevent_distributed_table_modify = false;
+        break;
+    default:
+        break;
+    }
+    switch (prevent_reference_table_modify)
+    {
+    case 1:
+        cxt->prevent_reference_table_modify = true;
+        break;
+    case 2:
+        cxt->prevent_reference_table_modify = false;
+        break;
+    default:
+        break;
+    }
 }
 
 static spqrguard_distributedRelations cxt;
@@ -549,7 +546,9 @@ spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
         if (stmt->kind == TRANS_STMT_COMMIT || stmt->kind == TRANS_STMT_PREPARE) { // mb prepare transaction too
             populate_spqrguard(&cxt);
 
-            if (any_modification) {                
+            if (any_modification) {
+                elog(WARNING, "Found pidor");
+                
 			    LockRelationOid(cxt.spqr_global_settings_reloid, AccessShareLock);
                 populate_spqrguard(&cxt);
                 if (cxt.prevent_reference_table_modify) {

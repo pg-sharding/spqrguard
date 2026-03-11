@@ -23,6 +23,6 @@ Reload PostgreSQL after adding `spqrguard` to `shared_preload_libraries`.
 ```sql
 CREATE EXTENSION spqrguard;
 SELECT spqr_metadata.mark_distributed_relation('orders');
-SET spqrguard.prevent_distributed_table_modify TO true;
+SET spqrguard.prevent_distributed_table_modify TO 'on';
 INSERT INTO orders VALUES (1);  -- ERROR: unable to modify distributed relation within read-only transaction
 ```
