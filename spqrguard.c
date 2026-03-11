@@ -48,12 +48,14 @@ static void spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString
 					ParamListInfo params, QueryEnvironment *queryEnv,
 					DestReceiver *dest, QueryCompletion *qc);
 
+static GucBoolCheckHook
+
 
 static ExecutorRun_hook_type prev_ExecutorRun_hook = NULL;
 static ProcessUtility_hook_type prev_ProcessUtility_hook = NULL;
 
-static bool prevent_distributed_table_modify = false;
-static bool prevent_reference_table_modify = false;
+static *bool prevent_distributed_table_modify = NULL;
+static *bool prevent_reference_table_modify = NULL;
 static bool any_modification = false;
 
 void
@@ -69,7 +71,7 @@ _PG_init(void)
                             "Restrict sql referencing one of SPQR reference relations to be read-only",
                             "Default of false",
                             &prevent_reference_table_modify,
-                            false,
+                            NULL,
                             PGC_SUSET,
                             GUC_NOT_IN_SAMPLE,
                             NULL,
@@ -80,7 +82,7 @@ _PG_init(void)
                             "Restrict sql referencing one of SPQR distributed relations to be read-only",
                             "Default of false",
                             &prevent_distributed_table_modify,
-                            false,
+                            NULL,
                             PGC_SUSET,
                             GUC_NOT_IN_SAMPLE,
                             NULL,
