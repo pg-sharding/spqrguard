@@ -1,4 +1,3 @@
-set allow_system_table_mods to true;
 CREATE EXTENSION spqrguard;
 CREATE TABLE not_spqr_t(i INT);
 CREATE TABLE spqr_d_t(i INT);
