@@ -6,11 +6,14 @@ OBJS = \
 	spqrguard.o
 
 EXTENSION = spqrguard
-DATA =  spqrguard--1.0.sql spqrguard--1.0--2.0.sql spqrguard--1.0--2.1.sql spqrguard--2.0.sql spqrguard--2.0--2.1.sql spqrguard--2.1.sql
+DATA =  spqrguard--1.0.sql spqrguard--1.0--2.0.sql \
+		 spqrguard--1.0--2.1.sql spqrguard--2.0.sql \
+		 spqrguard--2.0--2.1.sql spqrguard--2.1.sql \
+		 spqrguard--2.1--2.2.sql
 
 PGFILEDESC = "spqrguard - module for asserting SPQR data integrity"
 
-REGRESS = simple global_settings
+REGRESS = simple global_settings versions
 
 TAP_TESTS = 1
 
