@@ -1,5 +1,5 @@
 # spqrguard extension
 comment = 'spqrguard - module for asserting SPQR data integrity'
-default_version = '2.0'
+default_version = '2.1'
 module_pathname = '$libdir/spqrguard'
 relocatable = true
