@@ -546,9 +546,7 @@ spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
         if (stmt->kind == TRANS_STMT_COMMIT || stmt->kind == TRANS_STMT_PREPARE) { // mb prepare transaction too
             populate_spqrguard(&cxt);
 
-            if (any_modification) {
-                elog(WARNING, "Found pidor");
-                
+            if (any_modification) {                
 			    LockRelationOid(cxt.spqr_global_settings_reloid, AccessShareLock);
                 populate_spqrguard(&cxt);
                 if (cxt.prevent_reference_table_modify) {
