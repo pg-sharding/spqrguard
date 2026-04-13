@@ -36,12 +36,18 @@ INSERT INTO spqr_ref_t VALUES (2);
 ERROR:  unable to modify SPQR reference relation within read-only transaction
 SET spqrguard.prevent_reference_table_modify TO 'off';
 INSERT INTO spqr_ref_t VALUES (3);
+INSERT INTO spqr_metadata.spqr_global_settings (name, enabled) VALUES (70, true);
+INSERT INTO spqr_ref_t VALUES (4);
+ERROR:  unable to modify SPQR reference relation within read-only transaction
+DELETE FROM spqr_metadata.spqr_global_settings WHERE name = 69;
+INSERT INTO spqr_ref_t VALUES (5);
+ERROR:  unable to modify SPQR reference relation within read-only transaction
 SELECT spqr_metadata.unmark_reference_relation ('spqr_ref_t');
  unmark_reference_relation 
 ---------------------------
  
 (1 row)
 
-INSERT INTO spqr_ref_t VALUES (4);
+INSERT INTO spqr_ref_t VALUES (6);
 DROP TABLE not_spqr_t, spqr_d_t, spqr_ref_t;
 DROP EXTENSION spqrguard;

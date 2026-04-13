@@ -12,6 +12,7 @@ CREATE TABLE spqr_metadata.spqr_global_settings (
 * name
 * 42 = prevent_distributed_table_modify
 * 69 = prevent_reference_table_modify
+* 70 = prevent_reference_table_modify_lvl_2
 */
 
 CREATE TABLE spqr_metadata.spqr_distributed_relations (
