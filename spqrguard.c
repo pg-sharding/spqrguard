@@ -115,6 +115,7 @@ typedef struct spqrguard_distributedRelations {
 
     bool prevent_distributed_table_modify;
     bool prevent_reference_table_modify;
+    bool prevent_reference_table_modify_lvl_2;
 } spqrguard_distributedRelations; 
 
 
@@ -230,7 +231,7 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
         
         if (spqrguard_check_ref_relation(drs, relid)) {
             any_modification = true;
-            if (drs->prevent_reference_table_modify)
+            if (drs->prevent_reference_table_modify || drs->prevent_reference_table_modify_lvl_2)
                 elog(ERROR, "unable to modify SPQR reference relation within read-only transaction");
         }
     }
@@ -407,6 +408,7 @@ typedef Form_DataGlobalSettings *Form_GlobalSettings;
 
 #define PREVENT_DISTRIBUTED_TABLE_MODIFY 42
 #define PREVENT_REFERENCE_TABLE_MODIFY 69
+#define PREVENT_REFERENCE_TABLE_MODIFY_LVL_2 70
 
 static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
     Relation setrel;
@@ -462,11 +464,14 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
     if (cxt->spqr_global_settings_reloid == InvalidOid) {
         cxt->prevent_distributed_table_modify = false;
         cxt->prevent_reference_table_modify = false;
+        cxt->prevent_reference_table_modify_lvl_2 = false;
     } else {
         cxt->prevent_distributed_table_modify = 
             ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
         cxt->prevent_reference_table_modify = 
             ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_REFERENCE_TABLE_MODIFY);
+        cxt->prevent_reference_table_modify_lvl_2 = 
+            ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_REFERENCE_TABLE_MODIFY_LVL_2);
     }
 
     /* Session-level GUC is allowed to override default to true, not vise-versa */
@@ -549,7 +554,7 @@ spqrguard_ProcessUtility(PlannedStmt *pstmt, const char *queryString,
             if (any_modification) {                
 			    LockRelationOid(cxt.spqr_global_settings_reloid, AccessShareLock);
                 populate_spqrguard(&cxt);
-                if (cxt.prevent_reference_table_modify) {
+                if (cxt.prevent_distributed_table_modify) {
                     elog(ERROR, "unable to modify SPQR distributed relation within read-only transaction");
                 }
             }
