@@ -108,6 +108,7 @@ _PG_init(void)
 typedef struct spqrguard_distributedRelations {
     Oid spqr_d_metadata_reloid;
     Oid spqr_ref_metadata_reloid;
+    Oid spqr_trans_ref_metadata_reloid;
 
     Oid spqr_global_settings_reloid;
 
@@ -115,7 +116,7 @@ typedef struct spqrguard_distributedRelations {
 
     bool prevent_distributed_table_modify;
     bool prevent_reference_table_modify;
-    bool prevent_reference_table_modify_lvl_2;
+    bool prevent_transferred_reference_table_modify;
 } spqrguard_distributedRelations; 
 
 
@@ -150,6 +151,45 @@ static bool spqrguard_check_relation(spqrguard_distributedRelations *cxt, Oid re
 #define Anum_spqr_distributed_relations_reloid 1
 
     ScanKeyInit(&skey[0], Anum_spqr_distributed_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
+                ObjectIdGetDatum(relid));
+
+    scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 1, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+        res = true;
+    }
+
+    table_close(spqrrel, AccessShareLock);
+    systable_endscan(scan);
+
+    return res;
+}
+
+static bool spqrguard_check_transferred_ref_relation(spqrguard_distributedRelations *cxt, Oid relid) {
+    /* NOOP for now */
+    Relation spqrrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    bool    res;
+    ScanKeyData skey[1];
+
+    res = false;
+
+    /* SELECT FROM pg_catalog.pg_namespace WHERE nspname = 'spqr_metadata */
+    /**/
+    if (!cxt->initialized)
+    {
+	    res = true;
+	    return res;
+    }
+    spqrrel = table_open(cxt->spqr_trans_ref_metadata_reloid, AccessShareLock);
+
+#define Anum_spqr_transferred_reference_relations_reloid 1
+
+    ScanKeyInit(&skey[0], Anum_spqr_transferred_reference_relations_reloid, BTEqualStrategyNumber, F_OIDEQ,
                 ObjectIdGetDatum(relid));
 
     scan = systable_beginscan(spqrrel, InvalidOid, false, NULL, 1, skey);
@@ -231,7 +271,13 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
         
         if (spqrguard_check_ref_relation(drs, relid)) {
             any_modification = true;
-            if (drs->prevent_reference_table_modify || drs->prevent_reference_table_modify_lvl_2)
+            if (drs->prevent_reference_table_modify)
+                elog(ERROR, "unable to modify SPQR reference relation within read-only transaction");
+        }
+
+        if (spqrguard_check_transferred_ref_relation(drs, relid)) {
+            any_modification = true;
+            if (drs->prevent_transferred_reference_table_modify)
                 elog(ERROR, "unable to modify SPQR reference relation within read-only transaction");
         }
     }
@@ -242,6 +288,7 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
 
 static const char * spqrguard_dr_relname = "spqr_distributed_relations";
 static const char * spqrguard_ref_relname = "spqr_reference_relations";
+static const char * spqrguard_transferred_ref_relname = "spqr_transferred_reference_relations";
 static const char * spqrguard_dr_schema = "spqr_metadata";
 static const char * spqrguard_global_settings = "spqr_global_settings";
 
@@ -318,6 +365,44 @@ static Oid SPQRGResolveDistrRelOid(Oid MetadataSchemaOid) {
     systable_endscan(scan);
 
     return DistrRelOid;
+}
+
+static Oid SPQRGResolveTransferredReferenceRelOid(Oid MetadataSchemaOid) {
+    Relation classrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    Oid TransferredReferenceRelOid;
+    ScanKeyData skey[2];
+    Form_pg_class class_type;
+
+    TransferredReferenceRelOid = InvalidOid;
+    
+    /* SELECT FROM pg_catalog.pg_class WHERE relname = 'spqr_distributed_relations '
+    * and relnamespace = $oid; */
+    /**/
+    
+    classrel = table_open(RelationRelationId, RowExclusiveLock);
+
+    ScanKeyInit(&skey[0], Anum_pg_class_relname, BTEqualStrategyNumber, F_NAMEEQ,
+                CStringGetDatum(spqrguard_transferred_ref_relname));
+
+    ScanKeyInit(&skey[1], Anum_pg_class_relnamespace, BTEqualStrategyNumber,
+                F_OIDEQ, ObjectIdGetDatum(MetadataSchemaOid));
+
+    scan = systable_beginscan(classrel, ClassNameNspIndexId, true, NULL, 2, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+	    class_type = (Form_pg_class) GETSTRUCT(tuple);
+        TransferredReferenceRelOid = class_type->oid;
+    }
+
+    table_close(classrel, RowExclusiveLock);
+    systable_endscan(scan);
+
+    return TransferredReferenceRelOid;
 }
 
 static Oid SPQRGResolveReferenceRelOid(Oid MetadataSchemaOid) {
@@ -408,7 +493,7 @@ typedef Form_DataGlobalSettings *Form_GlobalSettings;
 
 #define PREVENT_DISTRIBUTED_TABLE_MODIFY 42
 #define PREVENT_REFERENCE_TABLE_MODIFY 69
-#define PREVENT_REFERENCE_TABLE_MODIFY_LVL_2 70
+#define PREVENT_TRANSFERRED_REFERENCE_TABLE_MODIFY 70
 
 static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
     Relation setrel;
@@ -457,6 +542,7 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
             cxt->initialized = true;
             cxt->spqr_d_metadata_reloid = SPQRGResolveDistrRelOid(spqrguard_dr_schema_oid);
             cxt->spqr_ref_metadata_reloid = SPQRGResolveReferenceRelOid(spqrguard_dr_schema_oid);
+            cxt->spqr_trans_ref_metadata_reloid = SPQRGResolveTransferredReferenceRelOid(spqrguard_dr_schema_oid);
             cxt->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema_oid);
         }
     }
@@ -464,14 +550,14 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
     if (cxt->spqr_global_settings_reloid == InvalidOid) {
         cxt->prevent_distributed_table_modify = false;
         cxt->prevent_reference_table_modify = false;
-        cxt->prevent_reference_table_modify_lvl_2 = false;
+        cxt->prevent_transferred_reference_table_modify = false;
     } else {
         cxt->prevent_distributed_table_modify = 
             ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_DISTRIBUTED_TABLE_MODIFY);
         cxt->prevent_reference_table_modify = 
             ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_REFERENCE_TABLE_MODIFY);
-        cxt->prevent_reference_table_modify_lvl_2 = 
-            ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_REFERENCE_TABLE_MODIFY_LVL_2);
+        cxt->prevent_transferred_reference_table_modify = 
+            ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_TRANSFERRED_REFERENCE_TABLE_MODIFY);
     }
 
     /* Session-level GUC is allowed to override default to true, not vise-versa */
