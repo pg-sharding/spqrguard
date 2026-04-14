@@ -33,17 +33,21 @@ SET spqrguard.prevent_reference_table_modify TO 'off';
 
 INSERT INTO spqr_ref_t VALUES (3);
 
-INSERT INTO spqr_metadata.spqr_global_settings (name, enabled) VALUES (70, true);
+SELECT spqr_metadata.mark_transferred_reference_relation ('spqr_ref_t');
 
 INSERT INTO spqr_ref_t VALUES (4);
 
-DELETE FROM spqr_metadata.spqr_global_settings WHERE name = 69;
+INSERT INTO spqr_metadata.spqr_global_settings (name, enabled) VALUES (70, true);
 
 INSERT INTO spqr_ref_t VALUES (5);
 
 SELECT spqr_metadata.unmark_reference_relation ('spqr_ref_t');
 
 INSERT INTO spqr_ref_t VALUES (6);
+
+SELECT spqr_metadata.unmark_transferred_reference_relation('spqr_ref_t');
+
+INSERT INTO spqr_ref_t VALUES (7);
 
 DROP TABLE not_spqr_t, spqr_d_t, spqr_ref_t;
 
