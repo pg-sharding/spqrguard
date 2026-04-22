@@ -1,27 +1,55 @@
 Parsed test spec with 2 sessions
 
-starting permutation: s1_insert_not_spqr s1_insert_d s1_insert_ref s2_drop_extension s1_insert_not_spqr s1_insert_d s1_insert_ref
+starting permutation: s1_insert_not_spqr s1_insert_d s1_insert_ref s2_drop_extension s1_insert_not_spqr s1_insert_d s1_insert_ref s1_select_not_spqr s1_select_d s1_select_ref
 step s1_insert_not_spqr: INSERT INTO not_spqr_t(i) VALUES (1);
 step s1_insert_d: INSERT INTO spqr_d_t(i) VALUES (1);
+step s1_insert_ref: INSERT INTO spqr_ref_t(i) VALUES (1);
+step s2_drop_extension: DROP EXTENSION spqrguard;
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_distributed_relations does not exist
+s1: WARNING:  table spqr_metadata.spqr_reference_relations does not exist
+s1: WARNING:  table spqr_metadata.spqr_transferred_reference_relations does not exist
+step s1_insert_not_spqr: INSERT INTO not_spqr_t(i) VALUES (1);
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_distributed_relations does not exist
+s1: WARNING:  table spqr_metadata.spqr_reference_relations does not exist
+s1: WARNING:  table spqr_metadata.spqr_transferred_reference_relations does not exist
+step s1_insert_d: INSERT INTO spqr_d_t(i) VALUES (1);
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
+s1: WARNING:  table spqr_metadata.spqr_distributed_relations does not exist
+s1: WARNING:  table spqr_metadata.spqr_reference_relations does not exist
+s1: WARNING:  table spqr_metadata.spqr_transferred_reference_relations does not exist
 step s1_insert_ref: INSERT INTO spqr_ref_t(i) VALUES (1);
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
-s1: WARNING:  table spqr_metadata.spqr_distributed_relations does not exist
-s1: WARNING:  table spqr_metadata.spqr_reference_relations does not exist
-s1: WARNING:  table spqr_metadata.spqr_transferred_reference_relations does not exist
-step s1_insert_not_spqr: INSERT INTO not_spqr_t(i) VALUES (1);
+step s1_select_not_spqr: SELECT count(*) FROM not_spqr_t;
+count
+-----
+    2
+(1 row)
+
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
-s1: WARNING:  table spqr_metadata.spqr_distributed_relations does not exist
-s1: WARNING:  table spqr_metadata.spqr_reference_relations does not exist
-s1: WARNING:  table spqr_metadata.spqr_transferred_reference_relations does not exist
-step s1_insert_d: INSERT INTO spqr_d_t(i) VALUES (1);
+step s1_select_d: SELECT count(*) FROM spqr_d_t;
+count
+-----
+    2
+(1 row)
+
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
 s1: WARNING:  table spqr_metadata.spqr_global_settings does not exist
-s1: WARNING:  table spqr_metadata.spqr_distributed_relations does not exist
-s1: WARNING:  table spqr_metadata.spqr_reference_relations does not exist
-s1: WARNING:  table spqr_metadata.spqr_transferred_reference_relations does not exist
-step s1_insert_ref: INSERT INTO spqr_ref_t(i) VALUES (1);
+step s1_select_ref: SELECT count(*) FROM spqr_ref_t;
+count
+-----
+    2
+(1 row)
+
