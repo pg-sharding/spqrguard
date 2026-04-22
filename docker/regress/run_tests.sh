@@ -20,5 +20,9 @@ if ! make USE_PGXS=1 installcheck PGUSER=postgres TAP_TESTS=; then
         echo "=== regression.diffs ==="
         cat /spqrguard/regression.diffs
     fi
+    if [ -f /spqrguard/output_iso/regression.diffs ]; then
+        echo "=== isolation.diffs ==="
+        cat /spqrguard/output_iso/regression.diffs
+    fi
     exit 1
 fi

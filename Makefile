@@ -14,6 +14,8 @@ DATA =  spqrguard--1.0.sql spqrguard--1.0--2.0.sql \
 PGFILEDESC = "spqrguard - module for asserting SPQR data integrity"
 
 REGRESS = simple global_settings versions
+ISOLATION = drop_extension
+ISOLATION_OPTS = --load-extension=spqrguard
 
 TAP_TESTS = 1
 
