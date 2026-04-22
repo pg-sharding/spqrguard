@@ -146,7 +146,11 @@ static bool spqrguard_check_relation(spqrguard_distributedRelations *cxt, Oid re
 	    res = true;
 	    return res;
     }
-    spqrrel = table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
+    spqrrel = try_table_open(cxt->spqr_d_metadata_reloid, AccessShareLock);
+    if (spqrrel == NULL) {
+        elog(WARNING, "table spqr_metadata.spqr_distributed_relations does not exist");
+        return false;
+    }
 
 #define Anum_spqr_distributed_relations_reloid 1
 
@@ -185,7 +189,11 @@ static bool spqrguard_check_transferred_ref_relation(spqrguard_distributedRelati
 	    res = true;
 	    return res;
     }
-    spqrrel = table_open(cxt->spqr_trans_ref_metadata_reloid, AccessShareLock);
+    spqrrel = try_table_open(cxt->spqr_trans_ref_metadata_reloid, AccessShareLock);
+    if (spqrrel == NULL) {
+        elog(WARNING, "table spqr_metadata.spqr_transferred_reference_relations does not exist");
+        return false;
+    }
 
 #define Anum_spqr_transferred_reference_relations_reloid 1
 
@@ -224,7 +232,11 @@ static bool spqrguard_check_ref_relation(spqrguard_distributedRelations *cxt, Oi
 	    res = true;
 	    return res;
     }
-    spqrrel = table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
+    spqrrel = try_table_open(cxt->spqr_ref_metadata_reloid, AccessShareLock);
+    if (spqrrel == NULL) {
+        elog(WARNING, "table spqr_metadata.spqr_reference_relations does not exist");
+        return false;
+    }
 
 #define Anum_spqr_reference_relations_reloid 1
 
@@ -503,7 +515,11 @@ static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
     TupleTableSlot *slot;
     bool val;
     
-    setrel = table_open(setReloid, AccessShareLock);
+    setrel = try_table_open(setReloid, AccessShareLock);
+    if (setrel == NULL) {
+        elog(WARNING, "table spqr_metadata.spqr_global_settings does not exist");
+        return false;
+    }
     /* default */
     val = false;
     
