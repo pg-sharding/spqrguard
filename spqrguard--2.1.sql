@@ -92,7 +92,7 @@ LANGUAGE SQL;
 
 CREATE TABLE spqr_metadata.spqr_local_key_ranges (
     spqr_distribution TEXT NOT NULL,
-    key_range_id TEXT PRIMARY KEY NOT NULL,
+    key_range_id TEXT CONSTRAINT spqr_local_key_ranges_pkey PRIMARY KEY NOT NULL,
     lower_bound BIGINT NOT NULL,
     n_lower_bound BIGINT 
 );
