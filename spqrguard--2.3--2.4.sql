@@ -2,7 +2,7 @@
 \echo Use "CREATE EXTENSION spqrguard" to load this file. \quit
 
 CREATE FUNCTION
-spqr_metadata.lock_key_range_read(v_key_range_id string, v_key_range_version int)
+spqr_metadata.lock_key_range_read(v_key_range_id text, v_key_range_version int)
 RETURNS BOOL
 LANGUAGE C 
 AS 'MODULE_PATHNAME', $$spqrguard_lock_key_range_read$$;

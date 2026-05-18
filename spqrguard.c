@@ -692,6 +692,7 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
 
 static spqrguard_distributedRelations cxt;
 
+#define Anum_spqr_local_key_range_key_range_id 1
 // XXX: do we need release?
 Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
     text *key_range_id_text = NULL;
@@ -700,8 +701,10 @@ Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
     Relation kr_ind;
     #define ResolveKeyRangeMetaCols 1
     ScanKeyData skey[ResolveKeyRangeMetaCols];
-    SysScanDesc desc;
+    IndexScanDesc desc;
+    TupleTableSlot *slot = NULL;
     bool val;
+    char *key_range_c_string;
 
     if (PG_ARGISNULL(0)) {
         ereport(ERROR, (errmsg("key_range_id can not be NULL")));
@@ -728,7 +731,7 @@ Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
         return true;
     }
 
-    kr_ind = try_table_open(cxt.spqr_local_key_ranges_pkey_reloid, AccessShareLock);
+    kr_ind = try_index_open(cxt.spqr_local_key_ranges_pkey_reloid, AccessShareLock);
     if (kr_ind == NULL) {
         elog(WARNING, "index spqr_metadata.spqr_local_key_ranges_pkey does not exist");
         return true;
@@ -736,18 +739,26 @@ Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
     /* default */
     val = false;
 
+    key_range_c_string = alloca((VARSIZE_ANY_EXHDR(key_range_id_text) + 1) * sizeof(key_range_c_string));
+    memcpy(key_range_c_string, key_range_id, VARSIZE_ANY_EXHDR(key_range_id_text));
+    key_range_c_string[VARSIZE_ANY_EXHDR(key_range_id_text)] = 0;
     
-    ScanKeyInit(&skey[0], Anum_spqr_global_settings_name,
+    ScanKeyInit(&skey[0], Anum_spqr_local_key_range_key_range_id,
             BTEqualStrategyNumber, F_TEXTEQ,
-            CStringGetDatum(key_range_id));
-            
-    desc = systable_beginscan_ordered(kr_rel, kr_ind, SnapshotSelf, ResolveKeyRangeMetaCols, skey);
+            CStringGetDatum(key_range_c_string));
 
-    if (systable_getnext_ordered(desc, ForwardScanDirection)) {
+    slot = table_slot_create(kr_rel, NULL);
+
+    desc = index_beginscan(kr_rel, kr_ind,
+									 SnapshotSelf, NULL, ResolveKeyRangeMetaCols, 0);
+    index_rescan(desc, skey, ResolveKeyRangeMetaCols, NULL, 0);
+
+    if (index_getnext_slot(desc, ForwardScanDirection, slot)) {
         val = true;
     }
 
-    systable_endscan_ordered(desc);
+    ExecDropSingleTupleTableSlot(slot);
+    index_endscan(desc);
     table_close(kr_rel, NoLock);
     table_close(kr_ind, AccessShareLock);
 
