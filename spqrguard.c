@@ -695,8 +695,6 @@ static spqrguard_distributedRelations cxt;
 #define Anum_spqr_local_key_range_key_range_id 1
 // XXX: do we need release?
 Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
-    text *key_range_id_text = NULL;
-    char *key_range_id = NULL;
     Relation kr_rel;
     Relation kr_ind;
     #define ResolveKeyRangeMetaCols 1
@@ -704,14 +702,10 @@ Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
     IndexScanDesc desc;
     TupleTableSlot *slot = NULL;
     bool val;
-    char *key_range_c_string;
 
     if (PG_ARGISNULL(0)) {
         ereport(ERROR, (errmsg("key_range_id can not be NULL")));
     }
-
-    key_range_id_text = PG_GETARG_TEXT_P(0);
-    key_range_id = VARDATA_ANY(key_range_id_text);
 
     populate_spqrguard(&cxt);
     
@@ -738,14 +732,10 @@ Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
     }
     /* default */
     val = false;
-
-    key_range_c_string = alloca((VARSIZE_ANY_EXHDR(key_range_id_text) + 1) * sizeof(key_range_c_string));
-    memcpy(key_range_c_string, key_range_id, VARSIZE_ANY_EXHDR(key_range_id_text));
-    key_range_c_string[VARSIZE_ANY_EXHDR(key_range_id_text)] = 0;
     
     ScanKeyInit(&skey[0], Anum_spqr_local_key_range_key_range_id,
             BTEqualStrategyNumber, F_TEXTEQ,
-            CStringGetDatum(key_range_c_string));
+            PG_GETARG_DATUM(0));
 
     slot = table_slot_create(kr_rel, NULL);
 

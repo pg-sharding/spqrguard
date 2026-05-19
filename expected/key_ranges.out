@@ -1,0 +1,25 @@
+CREATE EXTENSION spqrguard;
+CREATE TABLE spqr_d_t(i INT);
+SELECT spqr_metadata.mark_distributed_relation('spqr_d_t');
+ mark_distributed_relation 
+---------------------------
+ 
+(1 row)
+
+INSERT INTO spqr_metadata.spqr_local_key_ranges (key_range_id, spqr_distribution, lower_bound) VALUES ('kr1', '', 0);
+INSERT INTO spqr_d_t (i) VALUES (1);
+SELECT spqr_metadata.lock_key_range_read('kr1', 0);
+ lock_key_range_read 
+---------------------
+ t
+(1 row)
+
+INSERT INTO spqr_d_t (i) VALUES (2);
+ERROR:  unable to modify SPQR distributed relation within read-only transaction
+SELECT spqr_metadata.lock_key_range_read('nonexistent', 0);
+ lock_key_range_read 
+---------------------
+ f
+(1 row)
+
+DROP EXTENSION spqrguard;
