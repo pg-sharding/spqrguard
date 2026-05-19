@@ -685,7 +685,7 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
     default:
         break;
     }
-    if (key_range_lock) {
+    if (key_range_lock && ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_KEY_RANGE_MODIFY_ON_LOCK)) {
         cxt -> prevent_distributed_table_modify = true;
     }
 }
@@ -710,25 +710,24 @@ Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
     populate_spqrguard(&cxt);
     
     // check if key range is in local_key_ranges table
-    if (cxt.spqr_global_settings_reloid == InvalidOid) {
+    if (!cxt.initialized || cxt.spqr_global_settings_reloid == InvalidOid ) {
         /* TODO: mb panic? should not happen */
         return false;
     }
-
-    // lock distributed for update
-    key_range_lock = true;
-
+    if (!ResolveGlobalBoolSetting(cxt.spqr_global_settings_reloid, PREVENT_KEY_RANGE_MODIFY_ON_LOCK)) {
+        return false;
+    }
 
     kr_rel = try_table_open(cxt.spqr_local_key_ranges_reloid, AccessShareLock);
     if (kr_rel == NULL) {
         elog(WARNING, "table spqr_metadata.spqr_local_key_ranges does not exist");
-        return true;
+        return false;
     }
 
     kr_ind = try_index_open(cxt.spqr_local_key_ranges_pkey_reloid, AccessShareLock);
     if (kr_ind == NULL) {
         elog(WARNING, "index spqr_metadata.spqr_local_key_ranges_pkey does not exist");
-        return true;
+        return false;
     }
     /* default */
     val = false;
@@ -751,6 +750,11 @@ Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
 
     if (index_getnext_slot(desc, ForwardScanDirection, slot)) {
         val = true;
+    }
+
+    if (val) {
+        // lock distributed relations for update
+        key_range_lock = true;
     }
 
     ExecDropSingleTupleTableSlot(slot);

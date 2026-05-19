@@ -13,4 +13,16 @@ INSERT INTO spqr_d_t (i) VALUES (2);
 
 SELECT spqr_metadata.share_key_range('nonexistent', 0);
 
+INSERT INTO spqr_metadata.spqr_global_settings (name, enabled) VALUES (66, true);
+
+INSERT INTO spqr_d_t (i) VALUES (3);
+
+SELECT spqr_metadata.share_key_range('kr1', 0);
+
+INSERT INTO spqr_d_t (i) VALUES (4);
+
+DELETE FROM spqr_metadata.spqr_global_settings WHERE name = 66;
+
+INSERT INTO spqr_d_t (i) VALUES (5);
+
 DROP EXTENSION spqrguard;
