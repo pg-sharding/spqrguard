@@ -37,7 +37,7 @@
 
 PG_MODULE_MAGIC;
 
-PG_FUNCTION_INFO_V1(spqrguard_lock_key_range_read);
+PG_FUNCTION_INFO_V1(spqrguard_share_key_range);
 
 #if PG_VERSION_NUM >= 180000
 static void spqrguard_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count);
@@ -694,7 +694,7 @@ static spqrguard_distributedRelations cxt;
 
 #define Anum_spqr_local_key_range_key_range_id 1
 // XXX: do we need release?
-Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
+Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
     Relation kr_rel;
     Relation kr_ind;
     #define ResolveKeyRangeMetaCols 1
@@ -739,8 +739,14 @@ Datum spqrguard_lock_key_range_read (PG_FUNCTION_ARGS) {
 
     slot = table_slot_create(kr_rel, NULL);
 
+#if PG_VERSION_NUM >= 180000
     desc = index_beginscan(kr_rel, kr_ind,
 									 SnapshotSelf, NULL, ResolveKeyRangeMetaCols, 0);
+#else
+    desc = index_beginscan(kr_rel, kr_ind,
+									 SnapshotSelf, ResolveKeyRangeMetaCols, 0);
+#endif
+
     index_rescan(desc, skey, ResolveKeyRangeMetaCols, NULL, 0);
 
     if (index_getnext_slot(desc, ForwardScanDirection, slot)) {
