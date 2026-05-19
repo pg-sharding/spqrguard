@@ -727,6 +727,7 @@ Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
     kr_ind = try_index_open(cxt.spqr_local_key_ranges_pkey_reloid, AccessShareLock);
     if (kr_ind == NULL) {
         elog(WARNING, "index spqr_metadata.spqr_local_key_ranges_pkey does not exist");
+        table_close(kr_rel, AccessShareLock);
         PG_RETURN_BOOL(false);
     }
     /* default */
@@ -760,7 +761,7 @@ Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
     ExecDropSingleTupleTableSlot(slot);
     index_endscan(desc);
     table_close(kr_rel, NoLock);
-    table_close(kr_ind, AccessShareLock);
+    index_close(kr_ind, AccessShareLock);
 
     PG_RETURN_BOOL(val);
 }
