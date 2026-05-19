@@ -704,7 +704,7 @@ Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
     bool val;
 
     if (PG_ARGISNULL(0)) {
-        ereport(ERROR, (errmsg("key_range_id can not be NULL")));
+        ereport(ERROR, (errmsg("key_range_id cannot be NULL")));
     }
 
     populate_spqrguard(&cxt);
@@ -712,22 +712,22 @@ Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
     // check if key range is in local_key_ranges table
     if (!cxt.initialized || cxt.spqr_global_settings_reloid == InvalidOid ) {
         /* TODO: mb panic? should not happen */
-        return false;
+        PG_RETURN_BOOL(false);
     }
     if (!ResolveGlobalBoolSetting(cxt.spqr_global_settings_reloid, PREVENT_KEY_RANGE_MODIFY_ON_LOCK)) {
-        return false;
+        PG_RETURN_BOOL(false);
     }
 
     kr_rel = try_table_open(cxt.spqr_local_key_ranges_reloid, AccessShareLock);
     if (kr_rel == NULL) {
         elog(WARNING, "table spqr_metadata.spqr_local_key_ranges does not exist");
-        return false;
+        PG_RETURN_BOOL(false);
     }
 
     kr_ind = try_index_open(cxt.spqr_local_key_ranges_pkey_reloid, AccessShareLock);
     if (kr_ind == NULL) {
         elog(WARNING, "index spqr_metadata.spqr_local_key_ranges_pkey does not exist");
-        return false;
+        PG_RETURN_BOOL(false);
     }
     /* default */
     val = false;
@@ -762,7 +762,7 @@ Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
     table_close(kr_rel, NoLock);
     table_close(kr_ind, AccessShareLock);
 
-    return val;
+    PG_RETURN_BOOL(val);
 }
 
 
