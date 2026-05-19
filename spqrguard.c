@@ -37,6 +37,8 @@
 
 PG_MODULE_MAGIC;
 
+PG_FUNCTION_INFO_V1(spqrguard_share_key_range);
+
 #if PG_VERSION_NUM >= 180000
 static void spqrguard_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count);
 #else
@@ -61,6 +63,7 @@ const struct config_enum_entry spqrguard_guc_opts[] = {
 
 static int prevent_distributed_table_modify = 0;
 static int prevent_reference_table_modify = 0;
+static bool key_range_lock = false;
 static bool any_modification = false;
 
 void
@@ -109,6 +112,8 @@ typedef struct spqrguard_distributedRelations {
     Oid spqr_d_metadata_reloid;
     Oid spqr_ref_metadata_reloid;
     Oid spqr_trans_ref_metadata_reloid;
+    Oid spqr_local_key_ranges_reloid;
+    Oid spqr_local_key_ranges_pkey_reloid;
 
     Oid spqr_global_settings_reloid;
 
@@ -303,6 +308,8 @@ static const char * spqrguard_ref_relname = "spqr_reference_relations";
 static const char * spqrguard_transferred_ref_relname = "spqr_transferred_reference_relations";
 static const char * spqrguard_dr_schema = "spqr_metadata";
 static const char * spqrguard_global_settings = "spqr_global_settings";
+static const char * spqrguard_local_key_ranges = "spqr_local_key_ranges";
+static const char * spqrguard_local_key_ranges_pkey = "spqr_local_key_ranges_pkey";
 
 /* It would be more handy to have FIXED-oid relations... */
 
@@ -493,6 +500,82 @@ static Oid SPQRGResolveGlobalSettingsOid(Oid MetadataSchemaOid) {
     return SetRelOid;
 }
 
+static Oid SPQRGResolveLocalKeyRangesIndexOid(Oid MetadataSchemaOid) {
+    Relation classrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    Oid LocalKeyRangesIndOid;
+    ScanKeyData skey[2];
+    Form_pg_class class_type;
+
+    LocalKeyRangesIndOid = InvalidOid;
+    
+    /* SELECT FROM pg_catalog.pg_class WHERE relname = 'spqr_distributed_relations '
+    * and relnamespace = $oid; */
+    /**/
+    
+    classrel = table_open(RelationRelationId, RowExclusiveLock);
+
+    ScanKeyInit(&skey[0], Anum_pg_class_relname, BTEqualStrategyNumber, F_NAMEEQ,
+                CStringGetDatum(spqrguard_local_key_ranges_pkey));
+
+    ScanKeyInit(&skey[1], Anum_pg_class_relnamespace, BTEqualStrategyNumber,
+                F_OIDEQ, ObjectIdGetDatum(MetadataSchemaOid));
+
+    scan = systable_beginscan(classrel, ClassNameNspIndexId, true, NULL, 2, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+	    class_type = (Form_pg_class) GETSTRUCT(tuple);
+        LocalKeyRangesIndOid = class_type->oid;
+    }
+
+    table_close(classrel, RowExclusiveLock);
+    systable_endscan(scan);
+
+    return LocalKeyRangesIndOid;
+}
+
+static Oid SPQRGResolveLocalKeyRangesOid(Oid MetadataSchemaOid) {
+    Relation classrel;
+    SysScanDesc scan;
+    HeapTuple tuple;
+    Oid LocalKeyRangesOid;
+    ScanKeyData skey[2];
+    Form_pg_class class_type;
+
+    LocalKeyRangesOid = InvalidOid;
+    
+    /* SELECT FROM pg_catalog.pg_class WHERE relname = 'spqr_distributed_relations '
+    * and relnamespace = $oid; */
+    /**/
+    
+    classrel = table_open(RelationRelationId, RowExclusiveLock);
+
+    ScanKeyInit(&skey[0], Anum_pg_class_relname, BTEqualStrategyNumber, F_NAMEEQ,
+                CStringGetDatum(spqrguard_local_key_ranges));
+
+    ScanKeyInit(&skey[1], Anum_pg_class_relnamespace, BTEqualStrategyNumber,
+                F_OIDEQ, ObjectIdGetDatum(MetadataSchemaOid));
+
+    scan = systable_beginscan(classrel, ClassNameNspIndexId, true, NULL, 2, skey);
+    
+    tuple = systable_getnext(scan);
+
+    /* No map relation created. return invalid oid */
+    if (HeapTupleIsValid(tuple)) {
+	    class_type = (Form_pg_class) GETSTRUCT(tuple);
+        LocalKeyRangesOid = class_type->oid;
+    }
+
+    table_close(classrel, RowExclusiveLock);
+    systable_endscan(scan);
+
+    return LocalKeyRangesOid;
+}
+
 typedef struct Form_DataGlobalSettings {
     int32_t name;
     bool value;
@@ -506,6 +589,7 @@ typedef Form_DataGlobalSettings *Form_GlobalSettings;
 #define PREVENT_DISTRIBUTED_TABLE_MODIFY 42
 #define PREVENT_REFERENCE_TABLE_MODIFY 69
 #define PREVENT_TRANSFERRED_REFERENCE_TABLE_MODIFY 70
+#define PREVENT_KEY_RANGE_MODIFY_ON_LOCK 66
 
 static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
     Relation setrel;
@@ -560,6 +644,8 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
             cxt->spqr_ref_metadata_reloid = SPQRGResolveReferenceRelOid(spqrguard_dr_schema_oid);
             cxt->spqr_trans_ref_metadata_reloid = SPQRGResolveTransferredReferenceRelOid(spqrguard_dr_schema_oid);
             cxt->spqr_global_settings_reloid = SPQRGResolveGlobalSettingsOid(spqrguard_dr_schema_oid);
+            cxt->spqr_local_key_ranges_reloid = SPQRGResolveLocalKeyRangesOid(spqrguard_dr_schema_oid);
+            cxt->spqr_local_key_ranges_pkey_reloid = SPQRGResolveLocalKeyRangesIndexOid(spqrguard_dr_schema_oid);
         }
     }
 
@@ -599,9 +685,87 @@ static void populate_spqrguard(spqrguard_distributedRelations *cxt) {
     default:
         break;
     }
+    if (key_range_lock && ResolveGlobalBoolSetting(cxt->spqr_global_settings_reloid, PREVENT_KEY_RANGE_MODIFY_ON_LOCK)) {
+        cxt -> prevent_distributed_table_modify = true;
+    }
 }
 
 static spqrguard_distributedRelations cxt;
+
+#define Anum_spqr_local_key_range_key_range_id 1
+// XXX: do we need release?
+Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
+    Relation kr_rel;
+    Relation kr_ind;
+    #define ResolveKeyRangeMetaCols 1
+    ScanKeyData skey[ResolveKeyRangeMetaCols];
+    IndexScanDesc desc;
+    TupleTableSlot *slot = NULL;
+    bool val;
+
+    if (PG_ARGISNULL(0)) {
+        ereport(ERROR, (errmsg("key_range_id cannot be NULL")));
+    }
+
+    populate_spqrguard(&cxt);
+    
+    // check if key range is in local_key_ranges table
+    if (!cxt.initialized || cxt.spqr_global_settings_reloid == InvalidOid ) {
+        /* TODO: mb panic? should not happen */
+        PG_RETURN_BOOL(false);
+    }
+    if (!ResolveGlobalBoolSetting(cxt.spqr_global_settings_reloid, PREVENT_KEY_RANGE_MODIFY_ON_LOCK)) {
+        PG_RETURN_BOOL(false);
+    }
+
+    kr_rel = try_table_open(cxt.spqr_local_key_ranges_reloid, AccessShareLock);
+    if (kr_rel == NULL) {
+        elog(WARNING, "table spqr_metadata.spqr_local_key_ranges does not exist");
+        PG_RETURN_BOOL(false);
+    }
+
+    kr_ind = try_index_open(cxt.spqr_local_key_ranges_pkey_reloid, AccessShareLock);
+    if (kr_ind == NULL) {
+        elog(WARNING, "index spqr_metadata.spqr_local_key_ranges_pkey does not exist");
+        table_close(kr_rel, AccessShareLock);
+        PG_RETURN_BOOL(false);
+    }
+    /* default */
+    val = false;
+    
+    ScanKeyInit(&skey[0], Anum_spqr_local_key_range_key_range_id,
+            BTEqualStrategyNumber, F_TEXTEQ,
+            PG_GETARG_DATUM(0));
+
+    slot = table_slot_create(kr_rel, NULL);
+
+#if PG_VERSION_NUM >= 180000
+    desc = index_beginscan(kr_rel, kr_ind,
+									 SnapshotSelf, NULL, ResolveKeyRangeMetaCols, 0);
+#else
+    desc = index_beginscan(kr_rel, kr_ind,
+									 SnapshotSelf, ResolveKeyRangeMetaCols, 0);
+#endif
+
+    index_rescan(desc, skey, ResolveKeyRangeMetaCols, NULL, 0);
+
+    if (index_getnext_slot(desc, ForwardScanDirection, slot)) {
+        val = true;
+    }
+
+    if (val) {
+        // lock distributed relations for update
+        key_range_lock = true;
+    }
+
+    ExecDropSingleTupleTableSlot(slot);
+    index_endscan(desc);
+    table_close(kr_rel, NoLock);
+    index_close(kr_ind, AccessShareLock);
+
+    PG_RETURN_BOOL(val);
+}
+
 
 #if PG_VERSION_NUM >= 180000
 static void
