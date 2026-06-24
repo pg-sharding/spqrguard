@@ -39,6 +39,8 @@ PG_MODULE_MAGIC;
 
 PG_FUNCTION_INFO_V1(spqrguard_share_key_range);
 
+#define ERRCODE_SPQR_TRANSFER_ERROR MAKE_SQLSTATE('S','P','Q','R','T')
+
 #if PG_VERSION_NUM >= 180000
 static void spqrguard_ExecutorRun(QueryDesc *queryDesc, ScanDirection direction, uint64 count);
 #else
@@ -283,7 +285,8 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
 
         if (spqrguard_check_relation(drs, relid)) {
             if (drs->prevent_distributed_table_modify)
-                elog(ERROR, "unable to modify SPQR distributed relation within read-only transaction");
+                ereport(ERROR, (errcode(ERRCODE_SPQR_TRANSFER_ERROR),
+                    errmsg("unable to modify SPQR distributed relation within read-only transaction")));
         }
         
         if (spqrguard_check_ref_relation(drs, relid)) {
