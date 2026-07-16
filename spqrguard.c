@@ -281,9 +281,16 @@ static bool spqrguard_planstate_walker(struct PlanState *planstate,
 
         mts = (ModifyTableState*) planstate;
 
+		if (!mts->resultRelInfo)
+		{
+			ereport(ERROR, (errcode(ERRCODE_SPQR_TRANSFER_ERROR),
+				errmsg("unable to modify SPQR distributed relation in malformed state")));
+		}
+
         relid = RelationGetRelid(mts->resultRelInfo->ri_RelationDesc);
 
-        if (spqrguard_check_relation(drs, relid)) {
+        if (spqrguard_check_relation(drs, relid))
+		{
             if (drs->prevent_distributed_table_modify)
                 ereport(ERROR, (errcode(ERRCODE_SPQR_TRANSFER_ERROR),
                     errmsg("unable to modify SPQR distributed relation within read-only transaction")));
