@@ -10,9 +10,4 @@
 
 GRANT USAGE ON SCHEMA spqr_metadata TO PUBLIC;
 
-GRANT SELECT ON spqr_metadata.spqr_global_settings TO PUBLIC;
-GRANT SELECT ON spqr_metadata.spqr_distributed_relations TO PUBLIC;
-GRANT SELECT ON spqr_metadata.spqr_reference_relations TO PUBLIC;
-GRANT SELECT ON spqr_metadata.spqr_transferred_reference_relations TO PUBLIC;
-GRANT SELECT ON spqr_metadata.spqr_local_key_ranges TO PUBLIC;
-GRANT SELECT ON spqr_metadata.spqr_tx_status TO PUBLIC;
+GRANT SELECT ALL TABLES IN SCHEMA spqr_metadata TO PUBLIC
