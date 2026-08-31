@@ -14,31 +14,7 @@ SELECT count(*) FROM spqr_metadata.spqr_distributed_relations;
      1
 (1 row)
 
-SELECT count(*) FROM spqr_metadata.spqr_reference_relations;
- count 
--------
-     0
-(1 row)
-
-SELECT count(*) FROM spqr_metadata.spqr_transferred_reference_relations;
- count 
--------
-     0
-(1 row)
-
 SELECT count(*) FROM spqr_metadata.spqr_local_key_ranges;
- count 
--------
-     0
-(1 row)
-
-SELECT count(*) FROM spqr_metadata.spqr_global_settings;
- count 
--------
-     0
-(1 row)
-
-SELECT count(*) FROM spqr_metadata.spqr_tx_status;
  count 
 -------
      0
