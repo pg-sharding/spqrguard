@@ -324,7 +324,7 @@ static const char * spqrguard_local_key_ranges_pkey = "spqr_local_key_ranges_pke
 /* It would be more handy to have FIXED-oid relations... */
 
 
-static Oid SPQRGResolveMetadataSchemaOid() {
+static Oid SPQRGResolveMetadataSchemaOid(void) {
     Relation nsprel;
     SysScanDesc scan;
     HeapTuple tuple;
@@ -621,7 +621,11 @@ static bool ResolveGlobalBoolSetting(Oid setReloid, int32_t setname) {
               BTEqualStrategyNumber, F_INT4EQ,
               Int32GetDatum(setname));
               
+#if PG_VERSION_NUM >= 190000
+    desc = table_beginscan(setrel, SnapshotSelf, ResolveGlobalBoolSetCols, skey, SO_HINT_REL_READ_ONLY);
+#else
     desc = table_beginscan(setrel, SnapshotSelf, ResolveGlobalBoolSetCols, skey);
+#endif
     
     slot = table_slot_create(setrel, NULL);
 
@@ -749,7 +753,10 @@ Datum spqrguard_share_key_range (PG_FUNCTION_ARGS) {
 
     slot = table_slot_create(kr_rel, NULL);
 
-#if PG_VERSION_NUM >= 180000
+#if PG_VERSION_NUM >= 190000
+    desc = index_beginscan(kr_rel, kr_ind,
+									 SnapshotSelf, NULL, ResolveKeyRangeMetaCols, 0, SO_HINT_REL_READ_ONLY);
+#elif PG_VERSION_NUM >= 180000
     desc = index_beginscan(kr_rel, kr_ind,
 									 SnapshotSelf, NULL, ResolveKeyRangeMetaCols, 0);
 #else
